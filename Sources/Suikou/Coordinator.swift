@@ -116,6 +116,7 @@ final class Coordinator: HotkeyDelegate {
         isProcessing = true
         let started = Date()
         let config = llmConfig, llmEnabled = settings.llmEnabled
+        let skipShort = settings.skipShortSentences, shortLimit = settings.shortSentenceLimit
         let audioSeconds = Double(samples.count) / AudioRecorder.sampleRate
         let mode = self.mode, target = settings.currentTranslateTarget
 
@@ -127,6 +128,7 @@ final class Coordinator: HotkeyDelegate {
 
             var text = raw
             var warning: String?
+            var handledLocally = false
             if mode == .translate {
                 do {
                     text = try await cleaner.translate(raw, direction: target.instruction, style: ctx.style, config: config)
@@ -145,20 +147,25 @@ final class Coordinator: HotkeyDelegate {
                     await MainActor.run { finish(.error("改写失败：\(error.localizedDescription)")) }
                     return
                 }
-            } else if llmEnabled {
+            } else if llmEnabled && !(skipShort && Stats.count(raw) <= shortLimit) {
                 do {
                     text = try await cleaner.clean(raw, style: ctx.style, config: config)
                 } catch {
+                    text = LocalCleaner.clean(raw, style: ctx.style)
                     warning = "未整理（\(error.localizedDescription)）"
                 }
+            } else {
+                // Short sentence (or AI cleanup off): tidy it on-device and skip the API round trip.
+                text = LocalCleaner.clean(raw, style: ctx.style)
+                handledLocally = true
             }
-            let finalText = text, finalWarning = warning
+            let finalText = text, finalWarning = warning, local = handledLocally
             let ms = Int(Date().timeIntervalSince(started) * 1000)
 
             await MainActor.run {
                 guard !finalText.isEmpty else { finish(nil); return }
                 history.add(HistoryEntry(date: Date(), app: ctx.appName, raw: raw, text: finalText, ms: ms, audioSeconds: audioSeconds,
-                                         mode: mode == .translate ? "translate:\(target.id)" : nil))
+                                         mode: mode == .translate ? "translate:\(target.id)" : (local ? "local" : nil)))
                 stats.record(text: finalText, audioSeconds: audioSeconds)
 
                 // Paste only into the window the user was talking to, and only if we're allowed to send keystrokes.

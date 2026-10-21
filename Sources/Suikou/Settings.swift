@@ -62,6 +62,10 @@ final class Settings: ObservableObject {
     }
 
     @Published var translateTarget: String { didSet { d.set(translateTarget, forKey: "translateTarget") } }
+    /// Utterances of at most `shortSentenceLimit` words are cleaned on-device instead of calling DeepSeek.
+    @Published var skipShortSentences: Bool { didSet { d.set(skipShortSentences, forKey: "skipShortSentences") } }
+    @Published var shortSentenceLimit: Int { didSet { d.set(shortSentenceLimit, forKey: "shortSentenceLimit") } }
+    static let shortSentenceLimits = [6, 12, 20, 30]
 
     struct TranslateTarget: Identifiable {
         let id: String
@@ -107,6 +111,8 @@ final class Settings: ObservableObject {
         keepInClipboard = d.bool(forKey: "keepInClipboard")
         showInDock = d.bool(forKey: "showInDock")
         translateTarget = d.string(forKey: "translateTarget") ?? "en"
+        skipShortSentences = d.object(forKey: "skipShortSentences") as? Bool ?? true
+        shortSentenceLimit = d.object(forKey: "shortSentenceLimit") as? Int ?? 12
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 

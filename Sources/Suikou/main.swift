@@ -169,6 +169,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 if let i = CommandLine.arguments.firstIndex(of: "--render-ui") {
     UIRender.run(outDir: CommandLine.arguments[i + 1])
 }
+if let i = CommandLine.arguments.firstIndex(of: "--local-clean") {
+    // `--local-clean STYLE TEXT...` prints LocalCleaner output per line, for checking the short-sentence path.
+    let style = AppStyle(rawValue: CommandLine.arguments[i + 1]) ?? .notes
+    for text in CommandLine.arguments[(i + 2)...] {
+        print("\(text)  →  [\(LocalCleaner.clean(text, style: style))]  (\(Stats.count(text)) 字)")
+    }
+    exit(0)
+}
 if let i = CommandLine.arguments.firstIndex(of: "--selftest") {
     SelfTest.run(Array(CommandLine.arguments[(i + 1)...]))
 }

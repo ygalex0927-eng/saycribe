@@ -519,6 +519,8 @@ struct HistoryRow: View {
         if let mode = entry.mode, mode.hasPrefix("translate:") {
             let id = String(mode.dropFirst("translate:".count))
             parts.append("已翻译 · " + (Settings.translateTargets.first { $0.id == id }?.name ?? id))
+        } else if entry.mode == "local" {
+            parts.append("本地直出")
         } else if entry.raw != entry.text {
             parts.append("已整理")
         }
@@ -693,8 +695,20 @@ struct SettingsPage: View {
 
             SectionLabel(text: "AI 整理")
             Card {
-                Row(title: "整理口语", subtitle: "去掉口头禅和重复，听懂改口，补标点、排列表。") {
+                Row(title: "整理口语", subtitle: "去掉口头禅和重复，听懂改口，补标点、排列表。关闭后只在本机做简单整理。") {
                     Toggle("", isOn: $settings.llmEnabled).toggleStyle(.switch).labelsHidden().tint(Brand.accent)
+                }
+                RowDivider()
+                Row(title: "短句不调用 AI", subtitle: "不超过 \(settings.shortSentenceLimit) 个字的话在本机去掉口头禅、补好标点后直接写入，更快；长句仍交给 DeepSeek。翻译和改写不受影响。") {
+                    HStack(spacing: 10) {
+                        if settings.skipShortSentences {
+                            Picker("", selection: $settings.shortSentenceLimit) {
+                                ForEach(Settings.shortSentenceLimits, id: \.self) { Text("≤ \($0) 字").tag($0) }
+                            }
+                            .labelsHidden().fixedSize()
+                        }
+                        Toggle("", isOn: $settings.skipShortSentences).toggleStyle(.switch).labelsHidden().tint(Brand.accent)
+                    }
                 }
                 RowDivider()
                 Row(title: "整理模型") {
