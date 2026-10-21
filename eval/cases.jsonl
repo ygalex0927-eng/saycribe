@@ -1,0 +1,24 @@
+{"id":"filler-1","style":"chat","in":"嗯那个我们明天下午要不要一起去吃饭啊","has":["明天下午","吃饭"],"not":["嗯","那个"]}
+{"id":"correct-1","style":"chat","in":"我们明天三点不对四点开会然后呃记得带电脑","has":["四点|4点|4:00|16:00","电脑"],"not":["三点","3点","不对","呃"]}
+{"id":"correct-2","style":"email","in":"预算大概是五万块哦不是八万块请在周五之前确认","has":["8 万|80000|80,000|8万|八万","周五"],"not":["5 万","50000","5万","五万","哦不是"]}
+{"id":"correct-3","style":"chat","in":"把文件发给张三我是说发给李四","has":["李四"],"not":["张三","我是说"]}
+{"id":"correct-en","style":"chat","in":"let's meet on Monday uh actually I mean Tuesday at ten","has":["Tuesday"],"not":["Monday","uh"]}
+{"id":"stutter","style":"chat","in":"我我我觉得这个这个方案还可以","has":["我觉得","方案"],"not":["我我","这个这个"]}
+{"id":"question-noanswer","style":"chat","in":"你知道北京今天天气怎么样吗","has":["北京","天气"],"not":["晴","多云","度"]}
+{"id":"command-noexec","style":"notes","in":"帮我写一首关于春天的诗","has":["春天","诗"],"not":["\n"]}
+{"id":"list-1","style":"notes","in":"今天要做三件事第一回复邮件第二改一下周报第三约一下客户","has":["1. ","2. ","3. ","回复邮件","周报","客户"],"not":["第一","第二"]}
+{"id":"list-2","style":"email","in":"这次上线有几点要注意首先要备份数据库其次通知客服最后是灰度发布","has":["\n1. ","\n2. ","\n3. ","备份数据库","灰度"],"not":["首先","其次"]}
+{"id":"mixed-1","style":"code","in":"帮我把这个function改成async的然后加一个try catch","has":["async","try","catch"],"not":["。"]}
+{"id":"term-case","style":"notes","in":"我用github的actions跑ci然后部署到vercel","has":["GitHub","Actions|actions","CI","Vercel"],"not":[]}
+{"id":"dict-1","style":"chat","dict":["华臻轩","Seedance"],"in":"华真宣的新视频是用希德ance做的","has":["华臻轩","Seedance"],"not":["华真宣"]}
+{"id":"number-1","style":"notes","in":"转化率提升了百分之二十三点五一共两千三百个用户","has":["23.5%","2300|2,300"],"not":["百分之"]}
+{"id":"newline","style":"notes","in":"第一段写背景换行第二段写方案","has":["\n"],"not":["换行"]}
+{"id":"keep-tone","style":"chat","in":"哈哈哈这个太好笑了吧","has":["哈哈","好笑"],"not":[]}
+{"id":"only-filler","style":"chat","in":"嗯啊呃","exact":""}
+{"id":"en-pure","style":"email","in":"hi john um just wanted to follow up on the contract uh could you send it by friday","has":["John","Friday","contract"],"not":["um","uh"]}
+{"id":"no-translate","style":"chat","in":"this is really cool 我很喜欢","has":["cool","喜欢"],"not":[]}
+{"id":"chat-noperiod","style":"chat","in":"好的我知道了","has":["知道了"],"not":["。"]}
+{"id":"code-flags","style":"code","in":"运行npm run build然后加上杠杠verbose参数","has":["npm run build","--verbose"],"not":["杠杠"]}
+{"id":"long-para","style":"email","in":"关于下周的发布会我想说一下安排嗯场地已经订好了在国贸三期然后物料还差两个易拉宝另外嘉宾名单还没最终确定需要市场部这周五之前给到","has":["国贸","易拉宝","嘉宾","周五"],"not":["嗯"]}
+{"id":"intent-repeat","style":"chat","in":"真的真的非常感谢你","has":["真的","感谢"],"not":[]}
+{"id":"cancel-sentence","style":"chat","in":"我们周末去爬山吧算了还是去看电影吧","has":["电影"],"not":["爬山"]}

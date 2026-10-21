@@ -1,0 +1,10 @@
+.build/
+build/
+vendor/
+*.env
+.DS_Store
+._*
+# Design run artifacts: AI tool logs, the source dump sent to Codex, and screenshots (regenerate with --render-ui)
+design/*.log
+design/codex_prompt.txt
+design/shots/
