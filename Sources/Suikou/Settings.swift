@@ -32,12 +32,44 @@ enum Hotkey: String, CaseIterable, Identifiable {
     }
 }
 
+enum RecordMode: String, CaseIterable, Identifiable {
+    case hybrid, hold, toggle
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .hybrid: return "按住说话 + 点一下开始"
+        case .hold: return "只用按住说话"
+        case .toggle: return "点一下开始，再点一下结束"
+        }
+    }
+
+    var hint: String {
+        switch self {
+        case .hybrid: return "按住超过 0.3 秒是按住说话，松开就写入；快速点一下开始收听，说完再点一下结束。"
+        case .hold: return "按住说话，松开就写入；快速双击可以锁定收听。"
+        case .toggle: return "点一下开始收听，说完再点一下结束。不用一直按着。"
+        }
+    }
+
+    /// Rest of the home-page hint after "按住/点一下 [key]".
+    var homeTail: String {
+        switch self {
+        case .hybrid: return "说话，松开即写入；也可以点一下开始、再点一下结束。"
+        case .hold: return "说话，松开即写入。"
+        case .toggle: return "开始说话，再点一下结束并写入。"
+        }
+    }
+}
+
 /// User preferences, persisted in UserDefaults. The API key lives in ~/.config/suikou/secrets.env (chmod 600).
 final class Settings: ObservableObject {
     static let shared = Settings()
     private let d = UserDefaults.standard
 
     @Published var hotkey: Hotkey { didSet { d.set(hotkey.rawValue, forKey: "hotkey") } }
+    @Published var recordMode: RecordMode { didSet { d.set(recordMode.rawValue, forKey: "recordMode") } }
     @Published var llmEnabled: Bool { didSet { d.set(llmEnabled, forKey: "llmEnabled") } }
     @Published var cleanModel: String { didSet { d.set(cleanModel, forKey: "cleanModel") } }
     @Published var editModel: String { didSet { d.set(editModel, forKey: "editModel") } }
@@ -100,6 +132,7 @@ final class Settings: ObservableObject {
 
     private init() {
         hotkey = Hotkey(rawValue: d.string(forKey: "hotkey") ?? "") ?? .fn
+        recordMode = RecordMode(rawValue: d.string(forKey: "recordMode") ?? "") ?? .hybrid
         llmEnabled = d.object(forKey: "llmEnabled") as? Bool ?? true
         cleanModel = d.string(forKey: "cleanModel") ?? "deepseek-flash"
         editModel = d.string(forKey: "editModel") ?? "deepseek-flash"

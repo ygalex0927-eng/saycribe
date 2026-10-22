@@ -10,10 +10,12 @@ protocol HotkeyDelegate: AnyObject {
     func hotkeyCancelled()
 }
 
-/// Global push-to-talk on a single modifier key via a listen-only CGEventTap (needs Input Monitoring).
+/// Global dictation hotkey on a single modifier key via a listen-only CGEventTap (needs Input Monitoring).
 ///
-/// - Hold ≥ 0.3s then release → end (transcribe).
-/// - Quick tap → discarded; a second quick tap within 0.4s → locked hands-free mode, next press ends.
+/// How a press starts and ends a recording depends on `RecordMode`:
+/// - hybrid: hold ≥ 0.3s then release → end; a quick tap starts hands-free, the next press ends.
+/// - hold: hold then release → end; a quick tap is discarded, a double tap starts hands-free.
+/// - toggle: one press starts, the next press ends.
 /// - Esc while recording → cancel. Any other key while holding → cancel (user was pressing a shortcut like Fn+F1).
 /// - Holding ⌘+⌥ (either side, no other modifiers) does the same in translate mode. Adding ⌥ while the
 ///   dictation key is held upgrades that recording to translate.
@@ -36,6 +38,7 @@ final class HotkeyMonitor {
     private let doubleTapWindow = 0.4
 
     var hotkey: Hotkey { Settings.shared.hotkey }
+    var recordMode: RecordMode { Settings.shared.recordMode }
 
     func start() -> Bool {
         let mask = (1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventType.keyDown.rawValue)
@@ -128,10 +131,15 @@ final class HotkeyMonitor {
     private func keyDown(_ newMode: DictationMode) {
         switch state {
         case .idle:
-            state = .holding
             mode = newMode
             downAt = Date()
             notify { $0.hotkeyBegan(mode: newMode) }
+            if recordMode == .toggle {
+                state = .locked
+                notify { $0.hotkeyLocked() }
+            } else {
+                state = .holding
+            }
         case .locked:
             state = .idle
             notify { $0.hotkeyEnded() }
@@ -146,6 +154,9 @@ final class HotkeyMonitor {
         if now.timeIntervalSince(downAt) >= holdThreshold {
             state = .idle
             notify { $0.hotkeyEnded() }
+        } else if recordMode == .hybrid {
+            state = .locked
+            notify { $0.hotkeyLocked() }
         } else if now.timeIntervalSince(lastTapAt) <= doubleTapWindow {
             state = .locked
             lastTapAt = .distantPast

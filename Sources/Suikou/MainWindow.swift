@@ -287,9 +287,9 @@ struct HomePage: View {
                     BlinkCursor()
                 }
                 HStack(spacing: 6) {
-                    Text("按住").foregroundStyle(.secondary)
+                    Text(settings.recordMode == .toggle ? "点一下" : "按住").foregroundStyle(.secondary)
                     Keycap(label: settings.hotkey.keycap)
-                    Text("说话，松开即写入。").foregroundStyle(.secondary)
+                    Text(settings.recordMode.homeTail).foregroundStyle(.secondary)
                 }
                 .font(.system(size: 13.5))
                 HStack(spacing: 6) {
@@ -651,9 +651,25 @@ struct SettingsPage: View {
                     .labelsHidden().fixedSize()
                 }
                 RowDivider()
+                Row(title: "说话方式", subtitle: settings.recordMode.hint) {
+                    Picker("", selection: $settings.recordMode) {
+                        ForEach(RecordMode.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden().fixedSize()
+                }
+                RowDivider()
                 HStack(spacing: 22) {
-                    Gesture(keys: [settings.hotkey.keycap], text: "按住说话")
-                    Gesture(keys: [settings.hotkey.keycap, settings.hotkey.keycap], text: "双击锁定")
+                    let key = settings.hotkey.keycap
+                    switch settings.recordMode {
+                    case .hybrid:
+                        Gesture(keys: [key], text: "按住说话")
+                        Gesture(keys: [key], text: "点一下开始，再点结束")
+                    case .hold:
+                        Gesture(keys: [key], text: "按住说话")
+                        Gesture(keys: [key, key], text: "双击锁定")
+                    case .toggle:
+                        Gesture(keys: [key], text: "点一下开始，再点结束")
+                    }
                     Gesture(keys: ["esc"], text: "取消")
                     Spacer()
                 }
