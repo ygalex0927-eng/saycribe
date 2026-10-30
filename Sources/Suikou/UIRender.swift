@@ -21,6 +21,8 @@ enum UIRender {
         let stats = Stats()
         let controller = MainWindowController(history: history, stats: stats, onReloadModel: {})
 
+        let savedOnboarding = Settings.shared.hasCompletedOnboarding
+        Settings.shared.hasCompletedOnboarding = true
         for appearance in [("dark", NSAppearance.Name.darkAqua)] {
             for page in Page.allCases {
                 controller.nav.page = page
@@ -31,6 +33,15 @@ enum UIRender {
                 window.close()
             }
         }
+        Settings.shared.hasCompletedOnboarding = false
+        do {
+            let window = controller.makeWindow()
+            window.appearance = NSAppearance(named: .darkAqua)
+            window.setContentSize(NSSize(width: 860, height: 620))
+            snapshot(window.contentView!, to: out.appendingPathComponent("onboarding-dark.png"))
+            window.close()
+        }
+        Settings.shared.hasCompletedOnboarding = savedOnboarding
 
         let hud = HUDController()
         let states: [(String, HUDModel.Phase, Bool)] = [

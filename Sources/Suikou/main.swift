@@ -40,7 +40,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.writeStatus() }
         NSApp.mainMenu = Self.makeMainMenu()
         MainWindowController.applyDockPolicy(windowOpen: false)
-        if !Permissions.allGranted {
+        if !Settings.shared.hasCompletedOnboarding {
+            // First launch: always open the console so the walkthrough is visible (even as a login item).
+            mainWindow.show(.home)
+        } else if !Permissions.allGranted {
             mainWindow.show(.settings)
         } else if !launchedAsLoginItem {
             mainWindow.show(.home)

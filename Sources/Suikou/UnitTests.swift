@@ -16,8 +16,28 @@ enum UnitTests {
         history()
         appStyles()
         segments()
+        onboarding()
         print("\(passed) passed, \(failures) failed")
         exit(failures == 0 ? 0 : 1)
+    }
+
+    // MARK: - #12 onboarding
+
+    static func onboarding() {
+        let d = UserDefaults.standard
+        let key = "hasCompletedOnboarding"
+        let prev = d.object(forKey: key)
+        defer {
+            if let prev { d.set(prev, forKey: key) } else { d.removeObject(forKey: key) }
+            // Settings.shared already loaded; force the published flag back for the rest of the process.
+            Settings.shared.hasCompletedOnboarding = (prev as? Bool) ?? false
+        }
+        Settings.shared.hasCompletedOnboarding = false
+        check(Settings.shared.hasCompletedOnboarding == false, "onboard: starts incomplete")
+        Settings.shared.hasCompletedOnboarding = true
+        check(d.bool(forKey: key) == true, "onboard: persists")
+        Settings.shared.hasCompletedOnboarding = false
+        check(d.bool(forKey: key) == false, "onboard: reset")
     }
 
     // MARK: - #4 long recordings

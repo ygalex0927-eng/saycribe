@@ -62,6 +62,7 @@ final class Settings: ObservableObject {
     /// 0 = keep (up to the entry limit).
     @Published var historyRetentionDays: Int { didSet { d.set(historyRetentionDays, forKey: "historyRetentionDays") } }
     static let retentionChoices: [(Int, String)] = [(1, "1 天"), (7, "7 天"), (30, "30 天"), (90, "90 天"), (0, "一直保留")]
+    @Published var hasCompletedOnboarding: Bool { didSet { d.set(hasCompletedOnboarding, forKey: "hasCompletedOnboarding") } }
     @Published var showInDock: Bool { didSet { d.set(showInDock, forKey: "showInDock") } }
     @Published var launchAtLogin: Bool {
         didSet {
@@ -135,6 +136,7 @@ final class Settings: ObservableObject {
         micUID = d.string(forKey: "micUID") ?? ""
         playSounds = d.object(forKey: "playSounds") as? Bool ?? true
         keepInClipboard = d.bool(forKey: "keepInClipboard")
+        hasCompletedOnboarding = d.bool(forKey: "hasCompletedOnboarding")
         showInDock = d.bool(forKey: "showInDock")
         saveHistory = d.object(forKey: "saveHistory") as? Bool ?? true
         historyRetentionDays = d.object(forKey: "historyRetentionDays") as? Int ?? 0

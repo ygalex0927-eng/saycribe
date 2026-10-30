@@ -181,32 +181,40 @@ struct FlowLayout: Layout {
 
 struct MainView: View {
     @ObservedObject var nav: AppNav
+    @ObservedObject private var settings = Settings.shared
     let history: History
     let stats: Stats
     let onReloadModel: () -> Void
 
     var body: some View {
-        HStack(spacing: 0) {
-            Sidebar(nav: nav)
-                .frame(width: 200)
-                .background(Brand.surface)
-            Rectangle().fill(UI.hairline).frame(width: 1)
-            ScrollView {
-                Group {
-                    switch nav.page {
-                    case .home: HomePage(nav: nav, history: history, stats: stats)
-                    case .history: HistoryPage(history: history)
-                    case .dictionary: DictionaryPage()
-                    case .settings: SettingsPage(onReloadModel: onReloadModel)
+        ZStack {
+            HStack(spacing: 0) {
+                Sidebar(nav: nav)
+                    .frame(width: 200)
+                    .background(Brand.surface)
+                Rectangle().fill(UI.hairline).frame(width: 1)
+                ScrollView {
+                    Group {
+                        switch nav.page {
+                        case .home: HomePage(nav: nav, history: history, stats: stats)
+                        case .history: HistoryPage(history: history)
+                        case .dictionary: DictionaryPage()
+                        case .settings: SettingsPage(onReloadModel: onReloadModel)
+                        }
                     }
+                    .frame(maxWidth: UI.contentWidth, alignment: .leading)
+                    .padding(.horizontal, 40)
+                    .padding(.top, 44)
+                    .padding(.bottom, 40)
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: UI.contentWidth, alignment: .leading)
-                .padding(.horizontal, 40)
-                .padding(.top, 44)
-                .padding(.bottom, 40)
-                .frame(maxWidth: .infinity)
+                .background(Brand.ink)
             }
-            .background(Brand.ink)
+            if !settings.hasCompletedOnboarding {
+                OnboardingView()
+                    .transition(.opacity)
+                    .zIndex(10)
+            }
         }
         .ignoresSafeArea()
         .frame(minWidth: 820, minHeight: 580)
@@ -856,6 +864,11 @@ struct SettingsPage: View {
                 RowDivider()
                 Row(title: "登录时启动") {
                     Toggle("", isOn: $settings.launchAtLogin).toggleStyle(.switch).labelsHidden().tint(Brand.accent)
+                }
+                RowDivider()
+                Row(title: "重新看引导", subtitle: "下次打开控制台时会再走一遍欢迎、权限和快捷键说明。") {
+                    Button("重置") { settings.hasCompletedOnboarding = false }
+                        .buttonStyle(.bordered)
                 }
             }
 
