@@ -25,7 +25,15 @@ final class Coordinator: HotkeyDelegate {
 
     var isModelReady: Bool { recognizer != nil }
 
+    private(set) lazy var interpreter: Interpreter = {
+        let i = Interpreter(resources: resources, cleaner: cleaner, recognizer: { [weak self] in self?.recognizer })
+        Interpreter.shared = i
+        return i
+    }()
+    private let resources: URL
+
     init(resources: URL) {
+        self.resources = resources
         cleaner = Cleaner(resources: resources)
         modelDir = resources.appendingPathComponent("models/sense-voice")
         hotkeys.delegate = self

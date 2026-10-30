@@ -11,6 +11,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let resources = Bundle.main.resourceURL!
         coordinator = Coordinator(resources: resources)
         coordinator.loadRecognizer()
+        _ = coordinator.interpreter
+        // `open -a Saycribe --args --interpret-now` starts interpreting as soon as the speech model is ready (for Shortcuts / scripts).
+        if CommandLine.arguments.contains("--interpret-now") {
+            Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] t in
+                guard let self, self.coordinator.isModelReady else { return }
+                t.invalidate()
+                self.coordinator.interpreter.start()
+            }
+        }
         mainWindow = MainWindowController(history: coordinator.history, stats: coordinator.stats,
                                           onReloadModel: { [weak self] in self?.coordinator.loadRecognizer() })
 
@@ -105,6 +114,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "modelReady": coordinator.isModelReady,
             "apiKeySet": !Settings.shared.apiKey.isEmpty,
             "historyCount": coordinator.history.entries.count,
+            "interpreter": [
+                "phase": "\(coordinator.interpreter.phase)",
+                "output": coordinator.interpreter.outputName,
+                "error": coordinator.interpreter.error ?? "",
+                "lines": coordinator.interpreter.lines.suffix(5).map { ["zh": $0.zh, "en": $0.en ?? "", "ms": $0.ms ?? -1] },
+            ] as [String: Any],
         ]
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Suikou")
         if let data = try? JSONSerialization.data(withJSONObject: status, options: [.prettyPrinted, .sortedKeys]) {
@@ -139,6 +154,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         recent.submenu = sub
         menu.addItem(recent)
 
+        let interp = NSMenuItem(title: "会议同传（中 → 英语音）", action: #selector(toggleInterpreter), keyEquivalent: "")
+        interp.state = coordinator.interpreter.isOn ? .on : .off
+        interp.target = self
+        menu.addItem(interp)
+
         let llm = NSMenuItem(title: "AI 整理", action: #selector(toggleLLM), keyEquivalent: "")
         llm.state = Settings.shared.llmEnabled ? .on : .off
         llm.target = self
@@ -159,6 +179,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSPasteboard.general.setString(text, forType: .string)
     }
 
+    @objc private func toggleInterpreter() { coordinator.interpreter.toggle() }
+
     @objc private func toggleLLM() { Settings.shared.llmEnabled.toggle() }
 
     @objc private func openHome() { mainWindow.show(.home) }
@@ -169,6 +191,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 if let i = CommandLine.arguments.firstIndex(of: "--render-ui") {
     UIRender.run(outDir: CommandLine.arguments[i + 1])
 }
+if CommandLine.arguments.contains("--mic-test") {
+    // Starts and stops the real recorder three times (as a hotkey press would) and reports what it captured.
+    let recorder = AudioRecorder()
+    for round in 1...3 {
+        do {
+            try recorder.start()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+            let n = recorder.stop().count
+            print("round \(round): ok, \(n) samples (\(String(format: "%.2f", Double(n) / AudioRecorder.sampleRate))s)")
+        } catch {
+            print("round \(round): start failed (no crash): \(error.localizedDescription)")
+        }
+    }
+    exit(0)
+}
 if let i = CommandLine.arguments.firstIndex(of: "--local-clean") {
     // `--local-clean STYLE TEXT...` prints LocalCleaner output per line, for checking the short-sentence path.
     let style = AppStyle(rawValue: CommandLine.arguments[i + 1]) ?? .notes
@@ -176,6 +213,9 @@ if let i = CommandLine.arguments.firstIndex(of: "--local-clean") {
         print("\(text)  →  [\(LocalCleaner.clean(text, style: style))]  (\(Stats.count(text)) 字)")
     }
     exit(0)
+}
+if let i = CommandLine.arguments.firstIndex(of: "--interpret") {
+    SelfTest.interpret(Array(CommandLine.arguments[(i + 1)...]))
 }
 if let i = CommandLine.arguments.firstIndex(of: "--selftest") {
     SelfTest.run(Array(CommandLine.arguments[(i + 1)...]))

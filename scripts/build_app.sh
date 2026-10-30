@@ -4,8 +4,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SHERPA=vendor/sherpa-onnx-v1.13.8-osx-arm64-shared-no-tts
+SHERPA=vendor/sherpa-onnx-v1.13.8-osx-arm64-shared
 MODEL=vendor/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09
+KOKORO=vendor/kokoro-en-v0_19
 APP=build/Saycribe.app
 IDENTITY="${SUIKOU_SIGN_IDENTITY:-$(security find-identity -v -p codesigning | awk -F'"' '/Apple Development/{print $2; exit}')}"
 
@@ -13,11 +14,13 @@ swift build -c release --disable-sandbox
 BIN=$(swift build -c release --disable-sandbox --show-bin-path)/Suikou
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Frameworks" "$APP/Contents/Resources/models/sense-voice"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Frameworks" "$APP/Contents/Resources/models/sense-voice" "$APP/Contents/Resources/models/vad" "$APP/Contents/Resources/models/kokoro"
 cp "$BIN" "$APP/Contents/MacOS/Saycribe"
 cp "$SHERPA/lib/libsherpa-onnx-c-api.dylib" "$SHERPA/lib/libonnxruntime.dylib" "$APP/Contents/Frameworks/"
 cp -R Resources/prompts "$APP/Contents/Resources/"
 cp "$MODEL/model.int8.onnx" "$MODEL/tokens.txt" "$APP/Contents/Resources/models/sense-voice/"
+cp vendor/vad/silero_vad.onnx "$APP/Contents/Resources/models/vad/"
+cp -R "$KOKORO/model.onnx" "$KOKORO/voices.bin" "$KOKORO/tokens.txt" "$KOKORO/espeak-ng-data" "$APP/Contents/Resources/models/kokoro/"
 [ -f Resources/AppIcon.icns ] && cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 [ -f Resources/MenuBarIcon.png ] && cp Resources/MenuBarIcon*.png "$APP/Contents/Resources/"
 

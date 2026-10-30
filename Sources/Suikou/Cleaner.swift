@@ -26,6 +26,7 @@ final class Cleaner {
     private let cleanPrompt: String
     private let editPrompt: String
     private let translatePrompt: String
+    private let interpretPrompt: String
     private let styles: [String: String]
 
     init(resources: URL) {
@@ -33,6 +34,7 @@ final class Cleaner {
         cleanPrompt = (try? String(contentsOf: dir.appendingPathComponent("clean.md"), encoding: .utf8)) ?? ""
         editPrompt = (try? String(contentsOf: dir.appendingPathComponent("edit.md"), encoding: .utf8)) ?? ""
         translatePrompt = (try? String(contentsOf: dir.appendingPathComponent("translate.md"), encoding: .utf8)) ?? ""
+        interpretPrompt = (try? String(contentsOf: dir.appendingPathComponent("interpret.md"), encoding: .utf8)) ?? ""
         let data = (try? Data(contentsOf: dir.appendingPathComponent("styles.json"))) ?? Data()
         styles = (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
     }
@@ -60,6 +62,16 @@ final class Cleaner {
         parts.append("<transcript>\(transcript)</transcript>")
         return try await complete(key: config.apiKey, model: config.cleanModel, system: translatePrompt, user: parts.joined(separator: "\n"),
                                   timeout: 5 + Double(transcript.count) * 0.03)
+    }
+
+    /// Meeting interpreting: one spoken Chinese sentence → English to be read aloud. `context` is what was said just before.
+    func interpret(_ transcript: String, context: [String], config: LLMConfig) async throws -> String {
+        var parts: [String] = []
+        if !context.isEmpty { parts.append("【前文】\n" + context.joined(separator: "\n")) }
+        if !config.dictionary.isEmpty { parts.append("【个人词典】" + config.dictionary.joined(separator: "、")) }
+        parts.append("<transcript>\(transcript)</transcript>")
+        return try await complete(key: config.apiKey, model: config.cleanModel, system: interpretPrompt, user: parts.joined(separator: "\n"),
+                                  timeout: 6 + Double(transcript.count) * 0.03)
     }
 
     func edit(selection: String, instruction: String, config: LLMConfig) async throws -> String {

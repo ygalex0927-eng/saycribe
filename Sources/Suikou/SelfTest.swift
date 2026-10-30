@@ -35,6 +35,62 @@ enum SelfTest {
         exit(0)
     }
 
+    /// `--interpret in.wav out.wav`: VAD → recognize → DeepSeek interpret → Kokoro, one line per sentence, English audio to out.wav.
+    static func interpret(_ args: [String]) -> Never {
+        let resources = Bundle.main.resourceURL!
+        guard args.count >= 2, let samples = load(URL(fileURLWithPath: args[0])) else {
+            print("usage: --interpret in.wav out.wav"); exit(2)
+        }
+        var t = Date()
+        guard let rec = Recognizer(modelDir: resources.appendingPathComponent("models/sense-voice"), language: ProcessInfo.processInfo.environment["ASR_LANG"] ?? "zh"),
+              let vad = VoiceDetector(model: resources.appendingPathComponent("models/vad/silero_vad.onnx"), minSilence: 0.45),
+              let speaker = Speaker(modelDir: resources.appendingPathComponent("models/kokoro"))
+        else { print("models failed to load"); exit(1) }
+        print(String(format: "load   %.0fms", Date().timeIntervalSince(t) * 1000))
+
+        var segments: [[Float]] = []
+        for start in stride(from: 0, to: samples.count, by: 1600) {
+            segments += vad.accept(Array(samples[start..<min(start + 1600, samples.count)]))
+        }
+        segments += vad.flush()
+
+        let cleaner = Cleaner(resources: resources)
+        let config = LLMConfig.snapshot()
+        var english: [Float] = []
+        var context: [String] = []
+        let sem = DispatchSemaphore(value: 0)
+        for seg in segments {
+            t = Date()
+            let (zh, lang) = rec.recognize(seg)
+            let asrMs = Date().timeIntervalSince(t) * 1000
+            var en = ""
+            t = Date()
+            Task {
+                en = (try? await cleaner.interpret(zh, context: context, config: config)) ?? "<failed>"
+                sem.signal()
+            }
+            sem.wait()
+            let llmMs = Date().timeIntervalSince(t) * 1000
+            t = Date()
+            let voice = speaker.synthesize(en, voice: Settings.shared.interpretVoice, speed: Float(Settings.shared.interpretSpeed))
+            let ttsMs = Date().timeIntervalSince(t) * 1000
+            english += voice + [Float](repeating: 0, count: Int(speaker.sampleRate * 0.4))
+            context = Array((context + [zh]).suffix(3))
+            print(String(format: "%.1fs %@ asr %.0fms · llm %.0fms · tts %.0fms (%.1fs audio)\n  %@\n  → %@",
+                         Double(seg.count) / 16000, lang, asrMs, llmMs, ttsMs, Double(voice.count) / speaker.sampleRate, zh, en))
+        }
+        let fmt = AVAudioFormat(standardFormatWithSampleRate: speaker.sampleRate, channels: 1)!
+        let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: AVAudioFrameCount(english.count))!
+        buf.frameLength = buf.frameCapacity
+        english.withUnsafeBufferPointer { buf.floatChannelData![0].update(from: $0.baseAddress!, count: english.count) }
+        do {
+            try AVAudioFile(forWriting: URL(fileURLWithPath: args[1]), settings: fmt.settings).write(from: buf)
+        } catch {
+            print("write failed: \(error)"); exit(1)
+        }
+        exit(0)
+    }
+
     private static func load(_ url: URL) -> [Float]? {
         guard let file = try? AVAudioFile(forReading: url),
               let out = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false),

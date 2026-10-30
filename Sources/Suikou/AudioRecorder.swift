@@ -6,13 +6,17 @@ final class AudioRecorder {
     /// Hard cap so a forgotten hands-free session can't grow memory forever (5 minutes).
     static let maxSamples = Int(sampleRate) * 300
 
-    private let engine = AVAudioEngine()
+    /// Rebuilt on every `start()`: an engine caches the input format, and a stale one crashes `installTap`
+    /// after the mic's sample rate changes (e.g. built-in mic switched to 44.1 kHz while the output stays at 48 kHz).
+    private var engine = AVAudioEngine()
     private let lock = NSLock()
     private var samples: [Float] = []
     private(set) var isRunning = false
 
     /// Called on the audio thread with the raw RMS (0…1) of each buffer, for the HUD waveform.
     var onLevel: ((Float) -> Void)?
+    /// Streaming mode: each converted 16 kHz chunk goes here (audio thread) instead of being kept for `stop()`.
+    var onChunk: (([Float]) -> Void)?
 
     static func requestPermission(_ done: @escaping (Bool) -> Void) {
         AVCaptureDevice.requestAccess(for: .audio) { ok in DispatchQueue.main.async { done(ok) } }
@@ -22,12 +26,17 @@ final class AudioRecorder {
         guard !isRunning else { return }
         lock.withLock { samples.removeAll(keepingCapacity: true) }
 
+        engine = AVAudioEngine()
         let input = engine.inputNode
-        if var device = AudioDevices.resolve(uid: Settings.shared.micUID), let unit = input.audioUnit {
+        // Only switch devices when the user picked one; the engine already follows the system default.
+        let uid = Settings.shared.micUID
+        if !uid.isEmpty, var device = AudioDevices.inputs().first(where: { $0.uid == uid })?.id, let unit = input.audioUnit {
             AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
                                  &device, UInt32(MemoryLayout<AudioDeviceID>.size))
         }
-        let inFormat = input.outputFormat(forBus: 0)
+        // Tap with the hardware format: after a device switch `outputFormat` can still report the old sample
+        // rate, and a tap format that doesn't match the hardware throws "Input HW format and tap format not matching".
+        let inFormat = input.inputFormat(forBus: 0)
         guard inFormat.sampleRate > 0, inFormat.channelCount > 0,
               let outFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Self.sampleRate, channels: 1, interleaved: false),
               let converter = AVAudioConverter(from: inFormat, to: outFormat)
@@ -47,8 +56,12 @@ final class AudioRecorder {
             }
             guard error == nil, let ch = out.floatChannelData?[0] else { return }
             let chunk = UnsafeBufferPointer(start: ch, count: Int(out.frameLength))
-            self.lock.withLock {
-                if self.samples.count < Self.maxSamples { self.samples.append(contentsOf: chunk) }
+            if let onChunk = self.onChunk {
+                onChunk(Array(chunk))
+            } else {
+                self.lock.withLock {
+                    if self.samples.count < Self.maxSamples { self.samples.append(contentsOf: chunk) }
+                }
             }
 
             var sum: Float = 0

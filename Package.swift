@@ -1,7 +1,7 @@
 // swift-tools-version:5.9
 import PackageDescription
 
-let sherpaLib = Context.packageDirectory + "/vendor/sherpa-onnx-v1.13.8-osx-arm64-shared-no-tts/lib"
+let sherpaLib = Context.packageDirectory + "/vendor/sherpa-onnx-v1.13.8-osx-arm64-shared/lib"
 
 let package = Package(
     name: "Suikou",

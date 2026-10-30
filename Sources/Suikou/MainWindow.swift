@@ -636,6 +636,7 @@ struct SettingsPage: View {
     let onReloadModel: () -> Void
     @State private var tick = 0
     @State private var devices = AudioDevices.inputs()
+    @State private var outputs = AudioDevices.outputs()
     private let timer = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -687,6 +688,40 @@ struct SettingsPage: View {
                         ForEach(Settings.translateTargets) { Text($0.name).tag($0.id) }
                     }
                     .labelsHidden().fixedSize()
+                }
+            }
+
+            SectionLabel(text: "会议同传")
+            Card {
+                Row(title: "边说中文，对方听到英文", subtitle: "在 Zoom / 腾讯会议里把麦克风选成「BlackHole 2ch」，然后从菜单栏打开「会议同传」。每句话停顿一下，英文语音约 2 秒后送进会议。建议戴耳机，避免把别人的声音也翻译进去。") {
+                    Button(Interpreter.shared?.isOn == true ? "停止" : "开始") { Interpreter.shared?.toggle() }
+                }
+                RowDivider()
+                Row(title: "英文语音输出到", subtitle: AudioDevices.virtualCable == nil ? "还没有安装虚拟麦克风 BlackHole，现在只能先从扬声器试听。" : nil) {
+                    Picker("", selection: $settings.interpretOutputUID) {
+                        Text(AudioDevices.virtualCable.map { "自动（\($0.name)）" } ?? "自动").tag("")
+                        ForEach(outputs) { Text($0.name).tag($0.uid) }
+                    }
+                    .labelsHidden().fixedSize()
+                    .onChange(of: settings.interpretOutputUID) { _, _ in Interpreter.shared?.outputChanged() }
+                }
+                RowDivider()
+                Row(title: "英文声音") {
+                    HStack(spacing: 10) {
+                        Picker("", selection: $settings.interpretVoice) {
+                            ForEach(Speaker.voices, id: \.id) { Text($0.name).tag($0.id) }
+                        }
+                        .labelsHidden().fixedSize()
+                        Picker("", selection: $settings.interpretSpeed) {
+                            ForEach(Settings.interpretSpeeds, id: \.0) { Text($0.1).tag($0.0) }
+                        }
+                        .labelsHidden().fixedSize()
+                        Button("试听") { Interpreter.shared?.preview() }
+                    }
+                }
+                RowDivider()
+                Row(title: "英文原话也读出来", subtitle: "关闭时，识别成英文的整句会被忽略（多半是会上别人的声音串进了麦克风）。戴耳机时可以打开，自己说的英文也会送进会议。") {
+                    Toggle("", isOn: $settings.interpretPassEnglish).toggleStyle(.switch).labelsHidden().tint(Brand.accent)
                 }
             }
 
@@ -799,6 +834,7 @@ struct SettingsPage: View {
         .onReceive(timer) { _ in
             tick += 1
             devices = AudioDevices.inputs()
+            outputs = AudioDevices.outputs()
         }
     }
 }

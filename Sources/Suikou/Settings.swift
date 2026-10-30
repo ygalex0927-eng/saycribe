@@ -99,6 +99,15 @@ final class Settings: ObservableObject {
     @Published var shortSentenceLimit: Int { didSet { d.set(shortSentenceLimit, forKey: "shortSentenceLimit") } }
     static let shortSentenceLimits = [6, 12, 20, 30]
 
+    /// Meeting interpreter: where the English voice goes (CoreAudio UID; empty = the virtual cable if installed).
+    @Published var interpretOutputUID: String { didSet { d.set(interpretOutputUID, forKey: "interpretOutputUID") } }
+    /// Kokoro speaker id, see Speaker.voices.
+    @Published var interpretVoice: Int { didSet { d.set(interpretVoice, forKey: "interpretVoice") } }
+    @Published var interpretSpeed: Double { didSet { d.set(interpretSpeed, forKey: "interpretSpeed") } }
+    /// Voice English sentences as they are instead of dropping them (off: they're usually other people's audio leaking in).
+    @Published var interpretPassEnglish: Bool { didSet { d.set(interpretPassEnglish, forKey: "interpretPassEnglish") } }
+    static let interpretSpeeds: [(Double, String)] = [(0.9, "慢"), (1.0, "正常"), (1.1, "稍快"), (1.25, "快")]
+
     struct TranslateTarget: Identifiable {
         let id: String
         let name: String
@@ -146,6 +155,10 @@ final class Settings: ObservableObject {
         translateTarget = d.string(forKey: "translateTarget") ?? "en"
         skipShortSentences = d.object(forKey: "skipShortSentences") as? Bool ?? true
         shortSentenceLimit = d.object(forKey: "shortSentenceLimit") as? Int ?? 12
+        interpretOutputUID = d.string(forKey: "interpretOutputUID") ?? ""
+        interpretVoice = d.object(forKey: "interpretVoice") as? Int ?? 6
+        interpretSpeed = d.object(forKey: "interpretSpeed") as? Double ?? 1.0
+        interpretPassEnglish = d.bool(forKey: "interpretPassEnglish")
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 

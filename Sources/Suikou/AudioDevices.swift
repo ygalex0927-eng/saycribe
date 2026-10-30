@@ -9,16 +9,16 @@ struct AudioInputDevice: Identifiable, Hashable {
 
 enum AudioDevices {
     static func inputs() -> [AudioInputDevice] {
-        var addr = address(kAudioHardwarePropertyDevices)
-        var size: UInt32 = 0
-        let system = AudioObjectID(kAudioObjectSystemObject)
-        guard AudioObjectGetPropertyDataSize(system, &addr, 0, nil, &size) == noErr else { return [] }
-        var ids = [AudioDeviceID](repeating: 0, count: Int(size) / MemoryLayout<AudioDeviceID>.size)
-        guard AudioObjectGetPropertyData(system, &addr, 0, nil, &size, &ids) == noErr else { return [] }
-        return ids.compactMap { id in
-            guard inputChannels(id) > 0 else { return nil }
-            return AudioInputDevice(id: id, uid: string(id, kAudioDevicePropertyDeviceUID), name: string(id, kAudioObjectPropertyName))
-        }
+        devices(scope: kAudioDevicePropertyScopeInput)
+    }
+
+    static func outputs() -> [AudioInputDevice] {
+        devices(scope: kAudioDevicePropertyScopeOutput)
+    }
+
+    /// The virtual cable meeting apps can pick as a microphone (BlackHole, Loopback, VB-Cable…).
+    static var virtualCable: AudioInputDevice? {
+        outputs().first { d in ["blackhole", "loopback", "vb-cable", "soundflower"].contains { d.name.lowercased().contains($0) } }
     }
 
     static var defaultInput: AudioDeviceID? {
@@ -35,8 +35,21 @@ enum AudioDevices {
         return defaultInput
     }
 
-    private static func inputChannels(_ id: AudioDeviceID) -> Int {
-        var addr = address(kAudioDevicePropertyStreamConfiguration, scope: kAudioDevicePropertyScopeInput)
+    private static func devices(scope: AudioObjectPropertyScope) -> [AudioInputDevice] {
+        var addr = address(kAudioHardwarePropertyDevices)
+        var size: UInt32 = 0
+        let system = AudioObjectID(kAudioObjectSystemObject)
+        guard AudioObjectGetPropertyDataSize(system, &addr, 0, nil, &size) == noErr else { return [] }
+        var ids = [AudioDeviceID](repeating: 0, count: Int(size) / MemoryLayout<AudioDeviceID>.size)
+        guard AudioObjectGetPropertyData(system, &addr, 0, nil, &size, &ids) == noErr else { return [] }
+        return ids.compactMap { id in
+            guard channels(id, scope: scope) > 0 else { return nil }
+            return AudioInputDevice(id: id, uid: string(id, kAudioDevicePropertyDeviceUID), name: string(id, kAudioObjectPropertyName))
+        }
+    }
+
+    private static func channels(_ id: AudioDeviceID, scope: AudioObjectPropertyScope) -> Int {
+        var addr = address(kAudioDevicePropertyStreamConfiguration, scope: scope)
         var size: UInt32 = 0
         guard AudioObjectGetPropertyDataSize(id, &addr, 0, nil, &size) == noErr, size > 0 else { return 0 }
         let raw = UnsafeMutableRawPointer.allocate(byteCount: Int(size), alignment: MemoryLayout<AudioBufferList>.alignment)
