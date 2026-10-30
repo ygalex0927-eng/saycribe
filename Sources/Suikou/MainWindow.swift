@@ -397,19 +397,38 @@ struct StatTile: View {
 
 struct HistoryPage: View {
     @ObservedObject var history: History
+    @ObservedObject var settings = Settings.shared
     @State private var query = ""
     @State private var confirmClear = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            PageHeader(title: "历史记录", subtitle: "最近 \(History.limit) 条，只保存在本机。") {
+            PageHeader(title: "历史记录", subtitle: settings.saveHistory ? "最近 \(History.limit) 条，只保存在本机。" : "已关闭保存，新的记录不会写入。") {
                 if !history.entries.isEmpty {
+                    Menu("导出") {
+                        Button("Markdown（.md）") { export(.markdown) }
+                        Button("表格（.csv）") { export(.csv) }
+                    }
+                    .fixedSize()
                     Button("清空") { confirmClear = true }
                         .confirmationDialog("清空全部历史记录？", isPresented: $confirmClear) {
                             Button("清空", role: .destructive) { history.clear() }
                         }
                 }
             }
+            Card {
+                Row(title: "保存历史记录", subtitle: "关闭后说的话只写入输入框，不留在本机。") {
+                    Toggle("", isOn: $settings.saveHistory).toggleStyle(.switch).labelsHidden().tint(Brand.accent)
+                }
+                RowDivider()
+                Row(title: "保留时间", subtitle: "超过时间的记录会自动删除。") {
+                    Picker("", selection: $settings.historyRetentionDays) {
+                        ForEach(Settings.retentionChoices, id: \.0) { Text($0.1).tag($0.0) }
+                    }
+                    .labelsHidden().fixedSize()
+                }
+            }
+            .onChange(of: settings.historyRetentionDays) { history.prune() }
             SearchField(text: $query)
 
             let groups = grouped
@@ -428,6 +447,14 @@ struct HistoryPage: View {
                 }
             }
         }
+    }
+
+    private func export(_ format: History.ExportFormat) {
+        let panel = NSSavePanel()
+        let day = Date().formatted(.iso8601.year().month().day().dateSeparator(.omitted))
+        panel.nameFieldStringValue = "Saycribe-历史记录-\(day).\(format.rawValue)"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        try? History.export(history.entries, as: format).write(to: url, atomically: true, encoding: .utf8)
     }
 
     private var grouped: [(String, [HistoryEntry])] {

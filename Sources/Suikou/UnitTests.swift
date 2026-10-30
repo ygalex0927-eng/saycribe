@@ -13,8 +13,41 @@ enum UnitTests {
         permissions()
         clipboard()
         hotkeys()
+        history()
         print("\(passed) passed, \(failures) failed")
         exit(failures == 0 ? 0 : 1)
+    }
+
+    // MARK: - #7 history
+
+    static func history() {
+        let now = Date()
+        let e = { (daysAgo: Double, text: String) in
+            HistoryEntry(date: now.addingTimeInterval(-daysAgo * 86400), app: "微信", raw: "嗯\(text)", text: text, ms: 300)
+        }
+        let list = [e(0.1, "今天"), e(3, "三天前"), e(10, "十天前"), e(40, "四十天前")]
+        check(History.pruned(list, days: 0, now: now).count == 4, "hist: keep forever")
+        check(History.pruned(list, days: 7, now: now).map(\.text) == ["今天", "三天前"], "hist: 7 days")
+        check(History.pruned(list, days: 30, now: now).count == 3, "hist: 30 days")
+        check(History.pruned(list, days: 1, now: now).count == 1, "hist: 1 day")
+
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("suikou-unittest-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let h = History(url: tmp)
+        h.retentionDays = { 7 }
+        for x in list.reversed() { h.add(x) }
+        check(h.entries.map(\.text) == ["今天", "三天前"], "hist: add prunes")
+        h.retentionDays = { 1 }
+        h.prune(now: now)
+        check(History(url: tmp).entries.map(\.text) == ["今天"], "hist: prune persisted")
+
+        let tricky = HistoryEntry(date: now, app: "Mail", raw: "他说\"好\"，然后", text: "他说\"好\"，\n然后", ms: 1)
+        let csv = History.export([tricky], as: .csv)
+        check(csv.hasPrefix("\u{FEFF}时间,应用"), "export: csv header+BOM")
+        check(csv.contains("\"他说\"\"好\"\"，\n然后\""), "export: csv quoting")
+        check(csv.components(separatedBy: "\r\n").count == 3, "export: csv rows")
+        let md = History.export([tricky, e(0, "第二条")], as: .markdown)
+        check(md.contains("共 2 条") && md.contains("## ") && md.contains("> 原始识别：他说\"好\"，然后"), "export: markdown")
     }
 
     // MARK: - #13 custom hotkey

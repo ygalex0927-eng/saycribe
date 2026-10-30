@@ -172,8 +172,8 @@ final class Coordinator: HotkeyDelegate {
 
             await MainActor.run {
                 guard !finalText.isEmpty else { finish(nil); return }
-                history.add(HistoryEntry(date: Date(), app: ctx.appName, raw: raw, text: finalText, ms: ms, audioSeconds: audioSeconds,
-                                         mode: mode == .translate ? "translate:\(target.id)" : (local ? "local" : nil)))
+                if settings.saveHistory { history.add(HistoryEntry(date: Date(), app: ctx.appName, raw: raw, text: finalText, ms: ms, audioSeconds: audioSeconds,
+                                         mode: mode == .translate ? "translate:\(target.id)" : (local ? "local" : nil))) }
                 stats.record(text: finalText, audioSeconds: audioSeconds)
 
                 // Paste only into the window the user was talking to, and only if we're allowed to send keystrokes.

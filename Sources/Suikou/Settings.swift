@@ -55,6 +55,11 @@ final class Settings: ObservableObject {
     @Published var clipboardRestoreDelay: Double { didSet { d.set(clipboardRestoreDelay, forKey: "clipboardRestoreDelay") } }
     /// Read the selection with ⌘C when the app's Accessibility tree hides it (Electron apps).
     @Published var copySelectionFallback: Bool { didSet { d.set(copySelectionFallback, forKey: "copySelectionFallback") } }
+    /// Off: dictations aren't written to history at all.
+    @Published var saveHistory: Bool { didSet { d.set(saveHistory, forKey: "saveHistory") } }
+    /// 0 = keep (up to the entry limit).
+    @Published var historyRetentionDays: Int { didSet { d.set(historyRetentionDays, forKey: "historyRetentionDays") } }
+    static let retentionChoices: [(Int, String)] = [(1, "1 天"), (7, "7 天"), (30, "30 天"), (90, "90 天"), (0, "一直保留")]
     @Published var showInDock: Bool { didSet { d.set(showInDock, forKey: "showInDock") } }
     @Published var launchAtLogin: Bool {
         didSet {
@@ -128,6 +133,8 @@ final class Settings: ObservableObject {
         playSounds = d.object(forKey: "playSounds") as? Bool ?? true
         keepInClipboard = d.bool(forKey: "keepInClipboard")
         showInDock = d.bool(forKey: "showInDock")
+        saveHistory = d.object(forKey: "saveHistory") as? Bool ?? true
+        historyRetentionDays = d.object(forKey: "historyRetentionDays") as? Int ?? 0
         clipboardRestoreDelay = Inserter.clampDelay(d.object(forKey: "clipboardRestoreDelay") as? Double ?? 0.8)
         copySelectionFallback = d.object(forKey: "copySelectionFallback") as? Bool ?? true
         translateTarget = d.string(forKey: "translateTarget") ?? "en"

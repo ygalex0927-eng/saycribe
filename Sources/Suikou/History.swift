@@ -26,8 +26,12 @@ final class History: ObservableObject {
         }
     }
 
+    /// Days to keep entries; 0 = keep until the 200-entry limit.
+    var retentionDays: () -> Int = { Settings.shared.historyRetentionDays }
+
     func add(_ e: HistoryEntry) {
         entries.insert(e, at: 0)
+        entries = Self.pruned(entries, days: retentionDays(), now: Date())
         if entries.count > Self.limit { entries.removeLast(entries.count - Self.limit) }
         save()
     }
@@ -40,6 +44,44 @@ final class History: ObservableObject {
     func clear() {
         entries.removeAll()
         save()
+    }
+
+    /// Drops expired entries; call at launch and when the setting changes.
+    func prune(now: Date = Date()) {
+        let kept = Self.pruned(entries, days: retentionDays(), now: now)
+        guard kept.count != entries.count else { return }
+        entries = kept
+        save()
+    }
+
+    static func pruned(_ list: [HistoryEntry], days: Int, now: Date) -> [HistoryEntry] {
+        guard days > 0 else { return list }
+        let cutoff = now.addingTimeInterval(-Double(days) * 86400)
+        return list.filter { $0.date >= cutoff }
+    }
+
+    enum ExportFormat: String, CaseIterable { case markdown = "md", csv = "csv" }
+
+    static func export(_ list: [HistoryEntry], as format: ExportFormat) -> String {
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "zh_CN")
+        fmt.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        switch format {
+        case .markdown:
+            var out = "# Saycribe 历史记录\n\n导出时间：\(fmt.string(from: Date()))，共 \(list.count) 条\n"
+            for e in list {
+                out += "\n## \(fmt.string(from: e.date)) · \(e.app.isEmpty ? "未知应用" : e.app)\n\n\(e.text)\n"
+                if e.raw != e.text { out += "\n> 原始识别：\(e.raw.replacingOccurrences(of: "\n", with: " "))\n" }
+            }
+            return out
+        case .csv:
+            func cell(_ s: String) -> String { "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }
+            var out = "\u{FEFF}时间,应用,结果,原始识别,耗时ms,模式\r\n" // BOM so Excel reads UTF-8
+            for e in list {
+                out += [fmt.string(from: e.date), e.app, e.text, e.raw, String(e.ms), e.mode ?? ""].map(cell).joined(separator: ",") + "\r\n"
+            }
+            return out
+        }
     }
 
     private func save() {

@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let resources = Bundle.main.resourceURL!
         coordinator = Coordinator(resources: resources)
         coordinator.loadRecognizer()
+        coordinator.history.prune()
+        Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in self?.coordinator.history.prune() }
         _ = coordinator.interpreter
         // `open -a Saycribe --args --interpret-now` starts interpreting as soon as the speech model is ready (for Shortcuts / scripts).
         if CommandLine.arguments.contains("--interpret-now") {
