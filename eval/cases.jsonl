@@ -1,5 +1,5 @@
 {"id":"filler-1","style":"chat","in":"嗯那个我们明天下午要不要一起去吃饭啊","has":["明天下午","吃饭"],"not":["嗯","那个"]}
-{"id":"correct-1","style":"chat","in":"我们明天三点不对四点开会然后呃记得带电脑","has":["四点|4点|4:00|16:00","电脑"],"not":["三点","3点","不对","呃"]}
+{"id":"correct-1","style":"chat","in":"我们明天三点不对四点开会然后呃记得带电脑","has":["四点|4点|4 点|4:00|16:00","电脑"],"not":["三点","3点","不对","呃"]}
 {"id":"correct-2","style":"email","in":"预算大概是五万块哦不是八万块请在周五之前确认","has":["8 万|80000|80,000|8万|八万","周五"],"not":["5 万","50000","5万","五万","哦不是"]}
 {"id":"correct-3","style":"chat","in":"把文件发给张三我是说发给李四","has":["李四"],"not":["张三","我是说"]}
 {"id":"correct-en","style":"chat","in":"let's meet on Monday uh actually I mean Tuesday at ten","has":["Tuesday"],"not":["Monday","uh"]}
@@ -26,3 +26,11 @@
 {"id": "code-tone-2", "style": "code", "in": "嗯就是把那个用户列表改成分页吧每页二十条然后加个loading状态呗", "has": ["分页", "20", "loading", "，"], "not": ["吧", "呗", "嗯"]}
 {"id": "code-tone-3", "style": "code", "in": "哈哈好的那你先跑一下单元测试呢", "has": ["单元测试"], "not": ["哈哈", "呢"]}
 {"id": "chat-tone-keep", "style": "chat", "in": "好的呀那我们晚上见吧", "has": ["晚上见"], "not": ["。"]}
+{"id": "correct-4", "style": "chat", "in": "周三吧哦不周四下午见", "has": ["周四"], "not": ["周三", "哦不"]}
+{"id": "correct-5", "style": "notes", "in": "一共来了十二个人刚才说错了是十五个人", "has": ["15|十五"], "not": ["12", "十二", "说错"]}
+{"id": "correct-6", "style": "email", "in": "会议改到会议室A呃应该是会议室B", "has": ["会议室 B|会议室B"], "not": ["会议室A", "会议室 A", "应该是"]}
+{"id": "correct-7", "style": "chat", "in": "帮我订两张票三张吧三张", "has": ["3 张|三张|3张"], "not": ["两张", "2 张"]}
+{"id": "correct-8", "style": "chat", "in": "价格是九十九更正一下是八十九块", "has": ["89"], "not": ["99", "更正"]}
+{"id": "correct-9", "style": "email", "in": "联系人是王经理不是是陈经理电话一三八", "has": ["陈经理", "138"], "not": ["王经理"]}
+{"id": "correct-keep", "style": "chat", "in": "不是我不想去是真的没时间", "has": ["不是", "不想去", "没时间"], "not": []}
+{"id": "correct-keep-2", "style": "notes", "in": "这个方案不对的地方在于成本太高", "has": ["不对", "成本"], "not": []}
