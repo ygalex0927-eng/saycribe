@@ -793,6 +793,17 @@ struct SettingsPage: View {
                     Toggle("", isOn: $settings.keepInClipboard).toggleStyle(.switch).labelsHidden().tint(Brand.accent)
                 }
                 RowDivider()
+                Row(title: "剪贴板恢复延迟", subtitle: "写入后多久把原来的剪贴板放回去。个别应用粘贴慢、出现旧内容时调大。") {
+                    HStack {
+                        Slider(value: $settings.clipboardRestoreDelay, in: Inserter.restoreDelayRange, step: 0.1).frame(width: 120)
+                        Text(String(format: "%.1f 秒", settings.clipboardRestoreDelay)).font(.system(size: 12)).monospacedDigit().frame(width: 44)
+                    }
+                }
+                RowDivider()
+                Row(title: "读不到选区时用 ⌘C", subtitle: "部分 Electron 应用不提供选中文字，开启后会临时拷贝一次再恢复剪贴板。") {
+                    Toggle("", isOn: $settings.copySelectionFallback).toggleStyle(.switch).labelsHidden().tint(Brand.accent)
+                }
+                RowDivider()
                 Row(title: "在程序坞显示图标", subtitle: "关闭时只在菜单栏显示；打开控制台时总会显示。") {
                     Toggle("", isOn: $settings.showInDock).toggleStyle(.switch).labelsHidden().tint(Brand.accent)
                         .onChange(of: settings.showInDock) { _, _ in MainWindowController.applyDockPolicy(windowOpen: true) }

@@ -40,17 +40,29 @@ struct AppContext {
         return AppContext(pid: app?.processIdentifier, bundleID: app?.bundleIdentifier, appName: app?.localizedName ?? "", selectedText: selection())
     }
 
-    /// Selected text in the focused element via Accessibility. Apps that don't expose it (some Electron apps) return nil.
+    enum AXSelection: Equatable { case text(String), empty, unsupported }
+
+    /// Whether to try ⌘C: only when the app doesn't expose a selection at all (AX said nothing, not "empty").
+    static func needsCopyFallback(_ ax: AXSelection, enabled: Bool) -> Bool { enabled && ax == .unsupported }
+
+    /// Selected text in the focused element via Accessibility, falling back to ⌘C for apps (Electron) that hide it.
     private static func selection() -> String? {
+        let ax = axSelection()
+        if case let .text(t) = ax { return t }
+        return needsCopyFallback(ax, enabled: Settings.shared.copySelectionFallback) ? Inserter.copySelectionViaCommandC() : nil
+    }
+
+    private static func axSelection() -> AXSelection {
         let system = AXUIElementCreateSystemWide()
         var focused: CFTypeRef?
         guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
               let element = focused, CFGetTypeID(element) == AXUIElementGetTypeID()
-        else { return nil }
+        else { return .unsupported }
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element as! AXUIElement, kAXSelectedTextAttribute as CFString, &value) == .success,
-              let text = value as? String, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count < 8000
-        else { return nil }
-        return text
+              let text = value as? String
+        else { return .unsupported }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty || text.count >= 8000 ? .empty : .text(text)
     }
 }

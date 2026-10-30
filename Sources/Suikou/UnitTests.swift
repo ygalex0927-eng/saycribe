@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// `Saycribe --unit-tests` — pure-logic checks that need no microphone, models, or network. Exit 1 on any failure.
 enum UnitTests {
@@ -11,8 +11,31 @@ enum UnitTests {
 
     static func run() -> Never {
         permissions()
+        clipboard()
         print("\(passed) passed, \(failures) failed")
         exit(failures == 0 ? 0 : 1)
+    }
+
+    // MARK: - #15 selection fallback, clipboard restore
+
+    static func clipboard() {
+        check(Inserter.clampDelay(0.1) == 0.3 && Inserter.clampDelay(9) == 3 && Inserter.clampDelay(1.2) == 1.2, "clip: clamp")
+        check(AppContext.needsCopyFallback(.unsupported, enabled: true), "sel: fallback when AX hides it")
+        check(!AppContext.needsCopyFallback(.unsupported, enabled: false), "sel: off switch")
+        check(!AppContext.needsCopyFallback(.empty, enabled: true), "sel: no ⌘C when nothing selected")
+        check(!AppContext.needsCopyFallback(.text("x"), enabled: true), "sel: no ⌘C when AX has text")
+        let pb = NSPasteboard(name: NSPasteboard.Name("com.zjh.suikou.unittest"))
+        pb.clearContents()
+        pb.setString("原来的", forType: .string)
+        pb.setData(Data([1, 2, 3]), forType: NSPasteboard.PasteboardType("com.zjh.test"))
+        let snap = Inserter.snapshot(pb)
+        pb.clearContents(); pb.setString("临时", forType: .string)
+        Inserter.restore(snap, to: pb)
+        check(pb.string(forType: .string) == "原来的", "clip: restore string")
+        check(pb.data(forType: NSPasteboard.PasteboardType("com.zjh.test")) == Data([1, 2, 3]), "clip: restore custom type")
+        Inserter.restore([], to: pb)
+        check(pb.string(forType: .string) == nil, "clip: restore empty")
+        pb.releaseGlobally()
     }
 
     // MARK: - #3 permissions

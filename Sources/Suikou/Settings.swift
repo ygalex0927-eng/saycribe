@@ -81,6 +81,10 @@ final class Settings: ObservableObject {
     @Published var playSounds: Bool { didSet { d.set(playSounds, forKey: "playSounds") } }
     /// Leave the dictated text on the clipboard instead of restoring what was there before.
     @Published var keepInClipboard: Bool { didSet { d.set(keepInClipboard, forKey: "keepInClipboard") } }
+    /// Seconds to wait after ⌘V before putting the old clipboard back (slow apps need longer).
+    @Published var clipboardRestoreDelay: Double { didSet { d.set(clipboardRestoreDelay, forKey: "clipboardRestoreDelay") } }
+    /// Read the selection with ⌘C when the app's Accessibility tree hides it (Electron apps).
+    @Published var copySelectionFallback: Bool { didSet { d.set(copySelectionFallback, forKey: "copySelectionFallback") } }
     @Published var showInDock: Bool { didSet { d.set(showInDock, forKey: "showInDock") } }
     @Published var launchAtLogin: Bool {
         didSet {
@@ -152,6 +156,8 @@ final class Settings: ObservableObject {
         playSounds = d.object(forKey: "playSounds") as? Bool ?? true
         keepInClipboard = d.bool(forKey: "keepInClipboard")
         showInDock = d.bool(forKey: "showInDock")
+        clipboardRestoreDelay = Inserter.clampDelay(d.object(forKey: "clipboardRestoreDelay") as? Double ?? 0.8)
+        copySelectionFallback = d.object(forKey: "copySelectionFallback") as? Bool ?? true
         translateTarget = d.string(forKey: "translateTarget") ?? "en"
         skipShortSentences = d.object(forKey: "skipShortSentences") as? Bool ?? true
         shortSentenceLimit = d.object(forKey: "shortSentenceLimit") as? Int ?? 12
