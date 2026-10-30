@@ -1,6 +1,6 @@
 //! 自测 CLI：cargo run --release --example saycribe-cli -- <wav> [--models DIR] [--relay URL] [--clean] [--provider cuda] [--chunk-ms 100]
 //! token 从环境变量 SAYCRIBE_TOKEN 读取（不落盘）。模拟实时：按 chunk 推 PCM，测 finish()→Done 延迟（松开到出字）。
-use saycribe_core::{asr::{read_wav, Recognizer}, models::{ModelManager, SENSE_VOICE, SILERO_VAD}, paths::Paths, pipeline::*, relay::RelayClient, token::DeviceToken, Platform};
+use saycribe_core::{asr::{read_wav, Recognizer}, models::{ModelManager, sense_voice, silero_vad}, paths::Paths, pipeline::*, relay::RelayClient, token::DeviceToken, Platform};
 use std::{path::PathBuf, sync::{mpsc, Arc}, time::Instant};
 
 fn main() {
@@ -13,8 +13,8 @@ fn main() {
     let chunk_ms: usize = get("--chunk-ms").and_then(|s| s.parse().ok()).unwrap_or(100);
     let mm = ModelManager::new(&models);
     let t = Instant::now();
-    let sv = mm.ensure(&SENSE_VOICE, |_, _| {}).expect("SenseVoice");
-    let vad = mm.ensure(&SILERO_VAD, |_, _| {}).expect("VAD").join("silero_vad.onnx");
+    let sv = mm.ensure(&sense_voice(), |_, _| {}).expect("SenseVoice");
+    let vad = mm.ensure(&silero_vad(), |_, _| {}).expect("VAD").join("silero_vad.onnx");
     println!("models ready in {} ms: {}", t.elapsed().as_millis(), models.display());
     let t = Instant::now();
     let rec = Recognizer::new(&sv, "auto", 4, get("--provider").as_deref()).expect("load");
