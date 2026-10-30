@@ -37,7 +37,7 @@ saycribe_core
 文件：`config.json`、`token.json`（兜底）、`dictionary.json`、`history.jsonl`、`models/<id>/`。`Paths::under(root)` 用于便携版/测试。
 
 ## 2. 配置 `Config`
-字段：`relay_url`（默认 `https://saycribe-api.motomotos.com`，可改）、`language`（auto）、`default_style`（notes）、`app_tones`、`history_enabled`、`history_retention_days`（0=永久）、`vad_min_silence`（0.45s）、`max_concurrent_segments`（3）、`asr_threads`、`platform_extra`（平台私有键值，core 原样保存）。`Config::load(&paths)` / `save(&paths)`，缺省字段自动补默认。
+字段：`relay_url`（默认 `https://saycribe-api.motomotos.com`，可改）、`language`（auto）、`default_style`（notes）、`app_tones`、`history_enabled`、`history_retention_days`（0=永久）、`vad_min_silence`（0.45s；完整 VAD 默认还含 min_speech 0.25 / max_speech 12 / buffer 120s）、`max_concurrent_segments`（3）、`asr_threads`、`platform_extra`（平台私有键值，core 原样保存）。`Config::load(&paths)` / `save(&paths)`，缺省字段自动补默认。
 
 ## 3. Token
 ```rust
@@ -78,6 +78,7 @@ c.call_stream_async(req, on_delta, on_done)
 let rec = Recognizer::new(&model_dir, "auto", 4, None /* 或 Some("cuda") */)?;
 rec.transcribe(&pcm)? -> Transcript{text, audio_seconds, decode_ms}
 let mut seg = Segmenter::new(&silero_path, 0.45 /*停顿s*/, 12.0 /*最长段s》); // 或 with_config(VadConfig::default())?;
+// VadConfig 默认：threshold 0.5、min_silence 0.45、min_speech 0.25、max_speech 12、buffer 120s
 seg.push(&pcm) -> Vec<Segment{start, samples}>;  seg.finish() -> Vec<Segment>;  seg.speaking()
 ```
 `Recognizer` 是 Send+Sync，可放 `Arc` 复用（启动加载一次，约 0.3–1s）。
