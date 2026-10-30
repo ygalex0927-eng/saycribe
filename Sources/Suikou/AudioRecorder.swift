@@ -3,8 +3,9 @@ import AVFoundation
 /// Captures the default input device and resamples to 16 kHz mono Float32 for the recognizer.
 final class AudioRecorder {
     static let sampleRate = 16000.0
-    /// Hard cap so a forgotten hands-free session can't grow memory forever (5 minutes).
-    static let maxSamples = Int(sampleRate) * 300
+    /// Soft safety cap so a forgotten hands-free session can't grow memory forever (2 hours).
+    /// Long dictations are segmented by VAD; this is only a last-resort memory guard.
+    static let maxSamples = Int(sampleRate) * 7200
 
     /// Rebuilt on every `start()`: an engine caches the input format, and a stale one crashes `installTap`
     /// after the mic's sample rate changes (e.g. built-in mic switched to 44.1 kHz while the output stays at 48 kHz).

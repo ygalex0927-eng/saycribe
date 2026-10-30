@@ -15,8 +15,34 @@ enum UnitTests {
         hotkeys()
         history()
         appStyles()
+        segments()
         print("\(passed) passed, \(failures) failed")
         exit(failures == 0 ? 0 : 1)
+    }
+
+    // MARK: - #4 long recordings
+
+    static func segments() {
+        check(Segmenter.join(["今天开会", "  明天出差 "]) == "今天开会明天出差", "seg: cjk join")
+        check(Segmenter.join(["hello", "world"]) == "hello world", "seg: latin join")
+        check(Segmenter.join(["", "a", ""]) == "a", "seg: skip empty")
+        let parts = (1...10).map { _ in String(repeating: "字", count: 90) }
+        let g = Segmenter.group(parts, limit: 400)
+        check(g.count == 3 && g.allSatisfy { $0.count <= 400 }, "seg: group by limit")
+        check(Segmenter.group([String(repeating: "x", count: 900)], limit: 400).count == 1, "seg: oversize piece stays whole")
+        check(Segmenter.cutPoints([(0, 100), (200, 50), (300, 10)], total: 400) == [150, 275], "seg: cut mid-pause")
+        check(Segmenter.cutPoints([(0, 100)], total: 400).isEmpty, "seg: one span no cut")
+        check(Segmenter.cutPoints([(0, 120), (100, 50)], total: 400) == [100], "seg: overlapping spans")
+        check(AudioRecorder.maxSamples >= 16000 * 3600, "seg: recording cap ≥ 1h")
+        let sem = DispatchSemaphore(value: 0)
+        var joined = ""
+        Task {
+            joined = (try? await Segmenter.cleanAll(["一", "二", "三"]) { s in
+                try await Task.sleep(nanoseconds: UInt64.random(in: 1...20) * 1_000_000); return "[\(s)]" }) ?? "ERR"
+            sem.signal()
+        }
+        sem.wait()
+        check(joined == "[一二三]", "seg: cleanAll keeps order (\(joined))")
     }
 
     // MARK: - #10 app styles

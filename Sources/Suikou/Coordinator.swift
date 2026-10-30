@@ -129,9 +129,13 @@ final class Coordinator: HotkeyDelegate {
         let mode = self.mode, target = settings.currentTranslateTarget
 
         Task {
-            let raw: String = await withCheckedContinuation { cont in
-                asrQueue.async { cont.resume(returning: recognizer.transcribe(samples)) }
+            // Long dictation: split at pauses (Silero VAD), recognize and clean each piece, then join.
+            let vadURL = resources.appendingPathComponent("models/vad/silero_vad.onnx")
+            let segmented = mode == .dictate && ctx.selectedText == nil && audioSeconds >= Segmenter.longThresholdSeconds
+            let rawParts: [String] = await withCheckedContinuation { cont in
+                asrQueue.async { cont.resume(returning: Segmenter.transcribe(samples, recognizer: recognizer, vadModel: segmented ? vadURL : nil)) }
             }
+            let raw = Segmenter.join(rawParts)
             guard !raw.isEmpty else { await MainActor.run { finish(.error("没听清，再说一次")) }; return }
 
             var text = raw
@@ -157,7 +161,7 @@ final class Coordinator: HotkeyDelegate {
                 }
             } else if llmEnabled && !(skipShort && Stats.count(raw) <= shortLimit) {
                 do {
-                    text = try await cleaner.clean(raw, style: ctx.style, config: config)
+                    text = try await Segmenter.cleanAll(rawParts) { [cleaner] in try await cleaner.clean($0, style: ctx.style, config: config) }
                 } catch {
                     text = LocalCleaner.clean(raw, style: ctx.style)
                     warning = "未整理（\(error.localizedDescription)）"

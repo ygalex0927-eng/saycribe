@@ -56,6 +56,8 @@ final class VoiceDetector {
     static let window = 512
     private let vad: OpaquePointer
     private var pending: [Float] = []
+    /// (start sample, length) of every segment drained so far, in stream coordinates.
+    private(set) var spans: [(start: Int, count: Int)] = []
 
     init?(model: URL, minSilence: Float) {
         var cfg = SherpaOnnxVadModelConfig()
@@ -65,13 +67,13 @@ final class VoiceDetector {
         cfg.silero_vad.model = UnsafePointer(path)
         cfg.silero_vad.threshold = 0.5
         cfg.silero_vad.min_silence_duration = minSilence
-        cfg.silero_vad.min_speech_duration = 0.3
+        cfg.silero_vad.min_speech_duration = 0.25
         cfg.silero_vad.max_speech_duration = 12
         cfg.silero_vad.window_size = Int32(Self.window)
         cfg.sample_rate = 16000
         cfg.num_threads = 1
         cfg.provider = UnsafePointer(provider)
-        guard let v = SherpaOnnxCreateVoiceActivityDetector(&cfg, 60) else { return nil }
+        guard let v = SherpaOnnxCreateVoiceActivityDetector(&cfg, 120) else { return nil }
         vad = v
     }
 
@@ -104,6 +106,7 @@ final class VoiceDetector {
         while SherpaOnnxVoiceActivityDetectorEmpty(vad) == 0 {
             if let seg = SherpaOnnxVoiceActivityDetectorFront(vad) {
                 out.append(Array(UnsafeBufferPointer(start: seg.pointee.samples, count: Int(seg.pointee.n))))
+                spans.append((Int(seg.pointee.start), Int(seg.pointee.n)))
                 SherpaOnnxDestroySpeechSegment(seg)
             }
             SherpaOnnxVoiceActivityDetectorPop(vad)

@@ -3,8 +3,13 @@ import Foundation
 
 /// `Saycribe.app/Contents/MacOS/Saycribe --selftest a.wav [style]` — runs recognize + clean on a file and prints timings.
 enum SelfTest {
+    /// `SUIKOU_RESOURCES=…/Saycribe.app/Contents/Resources` lets a bare `swift build` binary find the models.
+    static var resources: URL {
+        ProcessInfo.processInfo.environment["SUIKOU_RESOURCES"].map { URL(fileURLWithPath: $0) } ?? Bundle.main.resourceURL!
+    }
+
     static func run(_ args: [String]) -> Never {
-        let resources = Bundle.main.resourceURL!
+        let resources = Self.resources
         guard args.count >= 1, let samples = load(URL(fileURLWithPath: args[0])) else {
             print("usage: --selftest file.wav [chat|email|code|notes]"); exit(2)
         }
@@ -16,15 +21,20 @@ enum SelfTest {
         }
         print(String(format: "load   %.0fms", Date().timeIntervalSince(t) * 1000))
         t = Date()
-        let raw = rec.transcribe(samples)
-        print(String(format: "asr    %.0fms  (%.1fs audio)  %@", Date().timeIntervalSince(t) * 1000, Double(samples.count) / 16000, raw))
+        let seconds = Double(samples.count) / 16000
+        let vadURL = seconds >= Segmenter.longThresholdSeconds ? resources.appendingPathComponent("models/vad/silero_vad.onnx") : nil
+        let parts = Segmenter.transcribe(samples, recognizer: rec, vadModel: vadURL)
+        let raw = Segmenter.join(parts)
+        print(String(format: "asr    %.0fms  (%.1fs audio, %d segments)  %@", Date().timeIntervalSince(t) * 1000, seconds, parts.count, raw))
+        for (i, p) in parts.enumerated() { print("  seg\(i + 1): \(p)") }
 
         let cleaner = Cleaner(resources: resources)
         let sem = DispatchSemaphore(value: 0)
         t = Date()
         Task {
             do {
-                let out = try await cleaner.clean(raw, style: style, config: .snapshot())
+                let config = LLMConfig.snapshot()
+                let out = try await Segmenter.cleanAll(parts) { try await cleaner.clean($0, style: style, config: config) }
                 print(String(format: "clean  %.0fms  [%@]  %@", Date().timeIntervalSince(t) * 1000, style.rawValue, out))
             } catch {
                 print("clean failed: \(error.localizedDescription)")
