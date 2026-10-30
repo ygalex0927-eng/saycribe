@@ -48,7 +48,7 @@ typedef struct sc_vad_config {
     float       threshold;         /* 默认 0.5 */
     float       min_silence_sec;   /* 停顿多久切段，默认 0.45（Mac 同传值） */
     float       min_speech_sec;    /* 默认 0.25 */
-    float       max_speech_sec;    /* 单段最长，超出强制切，默认 12 */
+    float       max_speech_sec;    /* 单段最长，超出强制切，默认 12（勿用 sherpa 默认 20） */
     float       buffer_sec;        /* 内部环形缓冲，默认 120 */
 } sc_vad_config;
 

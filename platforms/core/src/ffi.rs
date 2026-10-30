@@ -172,8 +172,8 @@ pub unsafe extern "C" fn sc_recognizer_create(
     };
     let lang = cstr(c.language).unwrap_or("auto");
     let provider = cstr(c.provider);
-    let _ = c.use_itn;
-    match Recognizer::new(Path::new(dir), lang, c.num_threads, provider) {
+    let use_itn = c.use_itn != 0;
+    match Recognizer::with_itn(Path::new(dir), lang, c.num_threads, provider, use_itn) {
         Ok(r) => {
             *out = Box::into_raw(Box::new(ScRecognizer { inner: r }));
             0
