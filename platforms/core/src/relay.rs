@@ -51,7 +51,8 @@ impl RelayRequest {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct Me { pub token_id: String, pub user: String, pub device: String }
+pub struct Me { pub token_id: String, pub user: String, pub device: String, /// mac/windows/linux/ios/android（旧 token 可能没有）
+    #[serde(default)] pub platform: Option<String> }
 
 #[derive(Clone)]
 pub struct RelayClient { inner: Arc<Inner> }

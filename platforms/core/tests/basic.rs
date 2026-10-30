@@ -87,3 +87,10 @@ fn tok() -> Option<DeviceToken> { Some(DeviceToken { token: "sct_t".into(), plat
     c.call_async(RelayRequest::clean("x", None, vec![]), move |r| { tx.send(r.unwrap_err().relay_kind()).unwrap(); });
     assert_eq!(rx.recv().unwrap(), Some(RelayErrorKind::Offline));
 }
+
+#[test] fn relay_me_platform() {
+    let c = RelayClient::new(&mock(200, r#"{"token_id":"t_1","user":"zjh","device":"win-test","platform":"windows"}"#, false), tok());
+    let me = c.me().unwrap(); assert_eq!(me.platform.as_deref(), Some("windows")); assert_eq!(me.device, "win-test");
+    let c = RelayClient::new(&mock(200, r#"{"token_id":"t_1","user":"zjh","device":"d"}"#, false), tok());
+    assert_eq!(c.me().unwrap().platform, None);
+}
