@@ -1,7 +1,7 @@
 import AppKit
 import ApplicationServices
 
-enum AppStyle: String {
+enum AppStyle: String, CaseIterable {
     case chat, email, code, notes
 
     var label: String {
@@ -11,6 +11,13 @@ enum AppStyle: String {
         case .code: return "代码"
         case .notes: return "通用"
         }
+    }
+
+    /// A user override (exact bundle id, case-insensitive) wins over the built-in guess.
+    static func resolve(_ id: String?, overrides: [String: String]) -> AppStyle {
+        if let id, let raw = overrides.first(where: { $0.key.lowercased() == id.lowercased() })?.value,
+           let s = AppStyle(rawValue: raw) { return s }
+        return forBundle(id)
     }
 
     static func forBundle(_ id: String?) -> AppStyle {
@@ -33,11 +40,13 @@ struct AppContext {
     let bundleID: String?
     let appName: String
     let selectedText: String?
-    var style: AppStyle { AppStyle.forBundle(bundleID) }
+    /// Resolved on the main thread at capture, so background work never reads live Settings.
+    let style: AppStyle
 
     static func capture() -> AppContext {
         let app = NSWorkspace.shared.frontmostApplication
-        return AppContext(pid: app?.processIdentifier, bundleID: app?.bundleIdentifier, appName: app?.localizedName ?? "", selectedText: selection())
+        return AppContext(pid: app?.processIdentifier, bundleID: app?.bundleIdentifier, appName: app?.localizedName ?? "", selectedText: selection(),
+                          style: AppStyle.resolve(app?.bundleIdentifier, overrides: Settings.shared.styleOverrides))
     }
 
     enum AXSelection: Equatable { case text(String), empty, unsupported }

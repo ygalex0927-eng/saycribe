@@ -819,6 +819,8 @@ struct SettingsPage: View {
                     .labelsHidden().fixedSize()
                 }
                 RowDivider()
+                AppStyleRows(settings: settings)
+                RowDivider()
                 Row(title: "DeepSeek API Key") {
                     SecureField("sk-…", text: $settings.apiKey)
                         .textFieldStyle(.roundedBorder)
@@ -978,5 +980,50 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         w.backgroundColor = NSColor(Brand.ink)
         w.contentView = NSHostingView(rootView: root.preferredColorScheme(.dark))
         return w
+    }
+}
+
+/// "App 语气": per-app overrides of the built-in chat/email/code/notes guess.
+struct AppStyleRows: View {
+    @ObservedObject var settings: Settings
+
+    private var running: [NSRunningApplication] {
+        NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular && $0.bundleIdentifier != nil && $0.bundleIdentifier != Bundle.main.bundleIdentifier }
+            .sorted { ($0.localizedName ?? "") < ($1.localizedName ?? "") }
+    }
+
+    private func name(_ id: String) -> String {
+        if let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == id }), let n = app.localizedName { return n }
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) { return url.deletingPathExtension().lastPathComponent }
+        return id
+    }
+
+    var body: some View {
+        Row(title: "App 语气", subtitle: "按应用自动选语气：聊天软件口语、邮件书面、编辑器/终端保留术语。默认判断不对时在这里改。") {
+            Menu("添加应用") {
+                ForEach(running.filter { settings.styleOverrides[$0.bundleIdentifier!] == nil }, id: \.processIdentifier) { app in
+                    Button("\(app.localizedName ?? app.bundleIdentifier!)（当前：\(AppStyle.forBundle(app.bundleIdentifier).label)）") {
+                        settings.styleOverrides[app.bundleIdentifier!] = AppStyle.forBundle(app.bundleIdentifier).rawValue
+                    }
+                }
+            }
+            .fixedSize()
+        }
+        ForEach(settings.styleOverrides.keys.sorted(), id: \.self) { id in
+            HStack(spacing: 10) {
+                Text(name(id)).font(.system(size: 12.5))
+                Text(id).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                Spacer()
+                Picker("", selection: Binding(get: { settings.styleOverrides[id] ?? "notes" },
+                                              set: { settings.styleOverrides[id] = $0 })) {
+                    ForEach(AppStyle.allCases, id: \.self) { Text($0.label).tag($0.rawValue) }
+                }
+                .labelsHidden().fixedSize()
+                Button { settings.styleOverrides[id] = nil } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                    .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16).padding(.vertical, 6).padding(.leading, 12)
+        }
     }
 }

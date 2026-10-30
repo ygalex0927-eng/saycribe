@@ -44,6 +44,8 @@ final class Settings: ObservableObject {
     @Published var cleanModel: String { didSet { d.set(cleanModel, forKey: "cleanModel") } }
     @Published var editModel: String { didSet { d.set(editModel, forKey: "editModel") } }
     @Published var asrLanguage: String { didSet { d.set(asrLanguage, forKey: "asrLanguage") } }
+    /// bundle id → AppStyle raw value, set on the settings page; beats AppStyle.forBundle.
+    @Published var styleOverrides: [String: String] { didSet { d.set(styleOverrides, forKey: "styleOverrides") } }
     @Published var dictionaryText: String { didSet { d.set(dictionaryText, forKey: "dictionary") } }
     @Published var apiKey: String { didSet { Self.saveKey(apiKey) } }
     /// CoreAudio UID of the chosen microphone; empty = follow the system default.
@@ -127,6 +129,7 @@ final class Settings: ObservableObject {
         cleanModel = d.string(forKey: "cleanModel") ?? "deepseek-flash"
         editModel = d.string(forKey: "editModel") ?? "deepseek-flash"
         asrLanguage = d.string(forKey: "asrLanguage") ?? "auto"
+        styleOverrides = d.dictionary(forKey: "styleOverrides") as? [String: String] ?? [:]
         dictionaryText = d.string(forKey: "dictionary") ?? ""
         apiKey = Self.loadKey()
         micUID = d.string(forKey: "micUID") ?? ""

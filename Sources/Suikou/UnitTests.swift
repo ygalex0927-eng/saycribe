@@ -14,8 +14,22 @@ enum UnitTests {
         clipboard()
         hotkeys()
         history()
+        appStyles()
         print("\(passed) passed, \(failures) failed")
         exit(failures == 0 ? 0 : 1)
+    }
+
+    // MARK: - #10 app styles
+
+    static func appStyles() {
+        check(AppStyle.forBundle("com.microsoft.VSCode") == .code, "style: vscode code")
+        check(AppStyle.forBundle("com.tencent.xinWeChat") == .chat, "style: wechat chat")
+        check(AppStyle.forBundle(nil) == .notes, "style: nil notes")
+        let o = ["com.tencent.xinWeChat": "email", "com.foo.bad": "nonsense"]
+        check(AppStyle.resolve("com.tencent.xinwechat", overrides: o) == .email, "style: override case-insensitive")
+        check(AppStyle.resolve("com.foo.bad", overrides: o) == .notes, "style: bad override falls back")
+        check(AppStyle.resolve("com.microsoft.VSCode", overrides: o) == .code, "style: no override")
+        check(AppStyle.resolve(nil, overrides: o) == .notes, "style: nil with overrides")
     }
 
     // MARK: - #7 history
