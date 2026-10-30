@@ -43,6 +43,8 @@ enum Inserter {
         let vKey: CGKeyCode = 9
         let down = CGEvent(keyboardEventSource: src, virtualKey: vKey, keyDown: true)
         let up = CGEvent(keyboardEventSource: src, virtualKey: vKey, keyDown: false)
+        down?.setIntegerValueField(.eventSourceUserData, value: HotkeyMonitor.syntheticMarker)
+        up?.setIntegerValueField(.eventSourceUserData, value: HotkeyMonitor.syntheticMarker)
         down?.flags = .maskCommand
         up?.flags = .maskCommand
         down?.post(tap: .cghidEventTap)

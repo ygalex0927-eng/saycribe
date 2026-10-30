@@ -40,7 +40,33 @@ final class HotkeyMonitor {
     var hotkey: Hotkey { Settings.shared.hotkey }
     var recordMode: RecordMode { Settings.shared.recordMode }
 
+    /// Marks events we synthesize (⌘V/⌘C) so our own tap ignores them.
+    static let syntheticMarker: Int64 = 0x5359_4352
+
+    /// True when the tap exists and macOS hasn't disabled it.
+    var isHealthy: Bool { tap.map { CGEvent.tapIsEnabled(tap: $0) } ?? false }
+    private var source: CFRunLoopSource?
+
+    func stop() {
+        if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
+        if let tap { CGEvent.tapEnable(tap: tap, enable: false); CFMachPortInvalidate(tap) }
+        tap = nil
+        source = nil
+        if state != .idle {
+            state = .idle
+            notify { $0.hotkeyCancelled() }
+        }
+    }
+
+    /// Tear down and recreate the tap (after permissions come back, a stale tap gets no events).
+    @discardableResult
+    func restart() -> Bool {
+        stop()
+        return start()
+    }
+
     func start() -> Bool {
+        if tap != nil { return true }
         let mask = (1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventType.keyDown.rawValue)
         let refcon = Unmanaged.passUnretained(self).toOpaque()
         guard let tap = CGEvent.tapCreate(
@@ -55,6 +81,7 @@ final class HotkeyMonitor {
         ) else { return false }
         self.tap = tap
         let src = CFMachPortCreateRunLoopSource(nil, tap, 0)
+        source = src
         CFRunLoopAddSource(CFRunLoopGetMain(), src, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
         return true
@@ -64,6 +91,7 @@ final class HotkeyMonitor {
     func reset() { state = .idle }
 
     private func handle(type: CGEventType, event: CGEvent) {
+        if event.getIntegerValueField(.eventSourceUserData) == Self.syntheticMarker { return }
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
             // We may have missed the key-up while disabled; don't leave the mic running.

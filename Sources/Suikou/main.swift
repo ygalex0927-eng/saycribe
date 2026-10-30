@@ -5,7 +5,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var coordinator: Coordinator!
     private var statusItem: NSStatusItem!
     private var mainWindow: MainWindowController!
-    private var hotkeyRetry: Timer?
+    private let permissionWatcher = PermissionWatcher()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let resources = Bundle.main.resourceURL!
@@ -88,13 +88,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return main
     }
 
-    /// The event tap can only be created once Input Monitoring is granted; keep retrying until it is.
+    /// The event tap can only be created once Input Monitoring is granted. The watcher keeps it alive:
+    /// recreates it when it dies or when a permission comes back, and warns when one is lost.
     private func startHotkeys() {
-        if coordinator.hotkeys.start() { return }
-        CGRequestListenEventAccess()
-        hotkeyRetry = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] t in
-            if self?.coordinator.hotkeys.start() == true { t.invalidate() }
+        if !coordinator.hotkeys.start() { CGRequestListenEventAccess() }
+        permissionWatcher.onChange = { [weak self] changes, now in
+            guard let self else { return }
+            for c in changes {
+                switch c {
+                case let .lost(kind):
+                    self.coordinator.hud.show(.error("\(kind.rawValue)权限丢失，请在设置里重新打开"))
+                    self.coordinator.hud.hide(after: 4)
+                    self.mainWindow.show(.settings)
+                    if kind == .inputMonitoring || kind == .accessibility { self.coordinator.hotkeys.stop() }
+                case .regained:
+                    if now.inputMonitoring { self.coordinator.hotkeys.restart() }
+                }
+            }
         }
+        permissionWatcher.onTick = { [weak self] now in
+            guard let hk = self?.coordinator.hotkeys, now.inputMonitoring, !hk.isHealthy, hk.state == .idle else { return }
+            hk.restart()
+        }
+        permissionWatcher.start()
     }
 
     /// Self-report for troubleshooting: ~/Library/Application Support/Suikou/status.json
@@ -107,6 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "accessibility": Permissions.accessibility,
             "inputMonitoring": Permissions.inputMonitoring,
             "hotkeyTapActive": hk.isActive,
+            "hotkeyTapHealthy": hk.isHealthy,
             "hotkey": Settings.shared.hotkey.rawValue,
             "hotkeyState": "\(hk.state)",
             "lastModifierKeyCode": hk.lastFlagsKeyCode,
@@ -132,7 +149,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         let status: String
-        if !Permissions.allGranted { status = "权限未开齐，点「设置…」查看" }
+        let missing = PermissionSnapshot.current.missing
+        if !missing.isEmpty { status = "缺少\(missing.map(\.rawValue).joined(separator: "、"))权限，点「设置…」查看" }
+        else if !coordinator.hotkeys.isHealthy { status = "快捷键监听未生效，正在重试…" }
         else if !coordinator.isModelReady { status = "语音模型加载中…" }
         else { status = "按住 \(Settings.shared.hotkey.keycap) 说话" }
         menu.addItem(withTitle: status, action: nil, keyEquivalent: "")
@@ -216,6 +235,9 @@ if let i = CommandLine.arguments.firstIndex(of: "--local-clean") {
 }
 if let i = CommandLine.arguments.firstIndex(of: "--interpret") {
     SelfTest.interpret(Array(CommandLine.arguments[(i + 1)...]))
+}
+if CommandLine.arguments.contains("--unit-tests") {
+    UnitTests.run()
 }
 if let i = CommandLine.arguments.firstIndex(of: "--selftest") {
     SelfTest.run(Array(CommandLine.arguments[(i + 1)...]))
