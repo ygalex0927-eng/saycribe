@@ -294,7 +294,7 @@ struct HomePage: View {
                 .font(.system(size: 13.5))
                 HStack(spacing: 6) {
                     Text("按住").foregroundStyle(.secondary)
-                    HStack(spacing: 3) { Keycap(label: "⌘"); Keycap(label: "⌥") }
+                    HStack(spacing: 3) { ForEach(settings.translateCombo.keys, id: \.self) { Keycap(label: $0) } }
                     Text("说话，直接写出\(settings.currentTranslateTarget.name)译文。").foregroundStyle(.secondary)
                 }
                 .font(.system(size: 13.5))
@@ -634,6 +634,7 @@ struct Chip: View {
 struct SettingsPage: View {
     @ObservedObject var settings = Settings.shared
     let onReloadModel: () -> Void
+    @StateObject private var recorder = HotkeyRecorder()
     @State private var tick = 0
     @State private var devices = AudioDevices.inputs()
     @State private var outputs = AudioDevices.outputs()
@@ -645,11 +646,23 @@ struct SettingsPage: View {
 
             SectionLabel(text: "快捷键")
             Card {
-                Row(title: "说话键", subtitle: "外接键盘的 fn 往往不会传给系统，选右侧 ⌘ 或 ⌥ 更稳。") {
-                    Picker("", selection: $settings.hotkey) {
-                        ForEach(Hotkey.allCases) { Text($0.label).tag($0) }
+                Row(title: "说话键", subtitle: recorder.message ?? "外接键盘的 fn 往往不会传给系统，选右侧 ⌘ 或 ⌥ 更稳；也可以录制任意组合键。") {
+                    HStack(spacing: 8) {
+                        Picker("", selection: $settings.hotkey) {
+                            ForEach(HotkeySpec.presets, id: \.0) { Text($0.0).tag($0.1) }
+                            if !HotkeySpec.presets.contains(where: { $0.1 == settings.hotkey }) {
+                                Text("自定义：\(settings.hotkey.keycap)").tag(settings.hotkey)
+                            }
+                        }
+                        .labelsHidden().fixedSize()
+                        Button(recorder.isRecording ? "取消" : "录制…") {
+                            if recorder.isRecording { recorder.stop(); recorder.message = nil }
+                            else {
+                                recorder.onRecorded = { settings.hotkey = $0 }
+                                recorder.start()
+                            }
+                        }
                     }
-                    .labelsHidden().fixedSize()
                 }
                 RowDivider()
                 Row(title: "说话方式", subtitle: settings.recordMode.hint) {
@@ -679,8 +692,11 @@ struct SettingsPage: View {
 
             SectionLabel(text: "翻译")
             Card {
-                Row(title: "翻译键", subtitle: "按住说任意语言，松开后直接写入译文。正在说话时补按 ⌥ 也会切到翻译。") {
-                    HStack(spacing: 3) { Keycap(label: "⌘"); Keycap(label: "⌥") }
+                Row(title: "翻译键", subtitle: "同时按住这两个键说任意语言，松开后直接写入译文。") {
+                    Picker("", selection: $settings.translateCombo) {
+                        ForEach(TranslateCombo.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden().fixedSize()
                 }
                 RowDivider()
                 Row(title: "译成") {

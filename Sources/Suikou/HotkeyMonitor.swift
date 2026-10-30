@@ -37,10 +37,15 @@ final class HotkeyMonitor {
     private let holdThreshold = 0.3
     private let doubleTapWindow = 0.4
 
-    var hotkey: Hotkey { Settings.shared.hotkey }
+    var hotkey: HotkeySpec { Settings.shared.hotkey }
+    /// The spec the tap was created for (key combos need a filtering tap so the keystroke doesn't reach the app).
+    private var tapSpec: HotkeySpec?
+    private var comboKeyDown = false
     var recordMode: RecordMode { Settings.shared.recordMode }
 
     /// Marks events we synthesize (⌘V/⌘C) so our own tap ignores them.
+    /// Set while the settings page records a new hotkey.
+    static var suspended = false
     static let syntheticMarker: Int64 = 0x5359_4352
 
     /// True when the tap exists and macOS hasn't disabled it.
@@ -52,6 +57,7 @@ final class HotkeyMonitor {
         if let tap { CGEvent.tapEnable(tap: tap, enable: false); CFMachPortInvalidate(tap) }
         tap = nil
         source = nil
+        comboKeyDown = false
         if state != .idle {
             state = .idle
             notify { $0.hotkeyCancelled() }
@@ -67,19 +73,20 @@ final class HotkeyMonitor {
 
     func start() -> Bool {
         if tap != nil { return true }
-        let mask = (1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventType.keyDown.rawValue)
+        let spec = hotkey
+        let mask = (1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
         let refcon = Unmanaged.passUnretained(self).toOpaque()
         guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly,
+            tap: .cgSessionEventTap, place: .headInsertEventTap, options: spec.modifierOnly ? .listenOnly : .defaultTap,
             eventsOfInterest: CGEventMask(mask),
             callback: { _, type, event, refcon in
                 let me = Unmanaged<HotkeyMonitor>.fromOpaque(refcon!).takeUnretainedValue()
-                me.handle(type: type, event: event)
-                return Unmanaged.passUnretained(event)
+                return me.handle(type: type, event: event) ? nil : Unmanaged.passUnretained(event)
             },
             userInfo: refcon
         ) else { return false }
         self.tap = tap
+        tapSpec = spec
         let src = CFMachPortCreateRunLoopSource(nil, tap, 0)
         source = src
         CFRunLoopAddSource(CFRunLoopGetMain(), src, .commonModes)
@@ -90,8 +97,12 @@ final class HotkeyMonitor {
     /// Called by the coordinator when it finishes or aborts on its own.
     func reset() { state = .idle }
 
-    private func handle(type: CGEventType, event: CGEvent) {
-        if event.getIntegerValueField(.eventSourceUserData) == Self.syntheticMarker { return }
+    /// Returns true to swallow the event (only possible for key-combo hotkeys, which use a filtering tap).
+    private func handle(type: CGEventType, event: CGEvent) -> Bool {
+        if event.getIntegerValueField(.eventSourceUserData) == Self.syntheticMarker { return false }
+        if Self.suspended { return false }
+        let spec = tapSpec ?? hotkey
+        let code = event.getIntegerValueField(.keyboardEventKeycode)
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
             // We may have missed the key-up while disabled; don't leave the mic running.
@@ -99,45 +110,46 @@ final class HotkeyMonitor {
                 state = .idle
                 notify { $0.hotkeyCancelled() }
             }
+            comboKeyDown = false
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
         case .flagsChanged:
-            lastFlagsKeyCode = event.getIntegerValueField(.keyboardEventKeycode)
+            lastFlagsKeyCode = code
             lastFlagsAt = Date()
-            let combo = isTranslateCombo(event.flags)
+            let combo = Settings.shared.translateCombo.matches(event.flags)
             if combo != comboHeld {
                 comboHeld = combo
                 if combo {
                     comboDown()
-                    return
+                    return false
                 }
                 if state == .holding && mode == .translate { keyUp() }
             }
-            guard event.getIntegerValueField(.keyboardEventKeycode) == hotkey.keyCode else { return }
-            isDown(event.flags) ? keyDown(.dictate) : keyUp()
+            guard spec.modifierOnly, code == spec.keyCode else { return false }
+            spec.isDown(event.flags) ? keyDown(.dictate) : keyUp()
         case .keyDown:
-            guard state != .idle else { return }
-            let code = event.getIntegerValueField(.keyboardEventKeycode)
+            if spec.matches(keyCode: code, flags: event.flags) {
+                if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 && !comboKeyDown {
+                    comboKeyDown = true
+                    keyDown(.dictate)
+                }
+                return true
+            }
+            guard state != .idle else { return false }
             if code == 53 || state == .holding { // Esc, or a shortcut like Fn+F1
                 state = .idle
+                comboKeyDown = false
                 notify { $0.hotkeyCancelled() }
+            }
+        case .keyUp:
+            if !spec.modifierOnly && code == spec.keyCode && comboKeyDown {
+                comboKeyDown = false
+                keyUp()
+                return true
             }
         default:
             break
         }
-    }
-
-    /// Uses device-specific bits for right-hand modifiers so a held left Option/Command doesn't look like ours.
-    private func isDown(_ flags: CGEventFlags) -> Bool {
-        switch hotkey {
-        case .fn: return flags.contains(.maskSecondaryFn)
-        case .rightOption: return flags.rawValue & 0x40 != 0 // NX_DEVICERALTKEYMASK
-        case .rightCommand: return flags.rawValue & 0x10 != 0 // NX_DEVICERCMDKEYMASK
-        }
-    }
-
-    private func isTranslateCombo(_ flags: CGEventFlags) -> Bool {
-        flags.contains(.maskCommand) && flags.contains(.maskAlternate)
-            && !flags.contains(.maskControl) && !flags.contains(.maskShift)
+        return false
     }
 
     private func comboDown() {

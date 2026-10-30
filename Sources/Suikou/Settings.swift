@@ -1,37 +1,6 @@
 import Foundation
 import ServiceManagement
 
-enum Hotkey: String, CaseIterable, Identifiable {
-    case fn, rightOption, rightCommand
-
-    var id: String { rawValue }
-
-    var label: String {
-        switch self {
-        case .fn: return "Fn（🌐）"
-        case .rightOption: return "右 Option"
-        case .rightCommand: return "右 Command"
-        }
-    }
-
-    var keycap: String {
-        switch self {
-        case .fn: return "fn"
-        case .rightOption: return "右 ⌥"
-        case .rightCommand: return "右 ⌘"
-        }
-    }
-
-    /// Virtual key code reported in flagsChanged events.
-    var keyCode: Int64 {
-        switch self {
-        case .fn: return 63
-        case .rightOption: return 61
-        case .rightCommand: return 54
-        }
-    }
-}
-
 enum RecordMode: String, CaseIterable, Identifiable {
     case hybrid, hold, toggle
 
@@ -68,7 +37,8 @@ final class Settings: ObservableObject {
     static let shared = Settings()
     private let d = UserDefaults.standard
 
-    @Published var hotkey: Hotkey { didSet { d.set(hotkey.rawValue, forKey: "hotkey") } }
+    @Published var hotkey: HotkeySpec { didSet { d.set(try? JSONEncoder().encode(hotkey), forKey: "hotkeySpec") } }
+    @Published var translateCombo: TranslateCombo { didSet { d.set(translateCombo.rawValue, forKey: "translateCombo") } }
     @Published var recordMode: RecordMode { didSet { d.set(recordMode.rawValue, forKey: "recordMode") } }
     @Published var llmEnabled: Bool { didSet { d.set(llmEnabled, forKey: "llmEnabled") } }
     @Published var cleanModel: String { didSet { d.set(cleanModel, forKey: "cleanModel") } }
@@ -144,7 +114,9 @@ final class Settings: ObservableObject {
     }
 
     private init() {
-        hotkey = Hotkey(rawValue: d.string(forKey: "hotkey") ?? "") ?? .fn
+        hotkey = d.data(forKey: "hotkeySpec").flatMap { try? JSONDecoder().decode(HotkeySpec.self, from: $0) }
+            ?? HotkeySpec.legacy(d.string(forKey: "hotkey")) ?? .fn
+        translateCombo = TranslateCombo(rawValue: d.string(forKey: "translateCombo") ?? "") ?? .cmdOpt
         recordMode = RecordMode(rawValue: d.string(forKey: "recordMode") ?? "") ?? .hybrid
         llmEnabled = d.object(forKey: "llmEnabled") as? Bool ?? true
         cleanModel = d.string(forKey: "cleanModel") ?? "deepseek-flash"

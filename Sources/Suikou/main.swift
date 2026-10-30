@@ -1,11 +1,13 @@
 import AppKit
 import SwiftUI
+import Combine
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var coordinator: Coordinator!
     private var statusItem: NSStatusItem!
     private var mainWindow: MainWindowController!
     private let permissionWatcher = PermissionWatcher()
+    private var hotkeySub: AnyCancellable?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let resources = Bundle.main.resourceURL!
@@ -111,6 +113,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             hk.restart()
         }
         permissionWatcher.start()
+        // A new hotkey may need a different kind of tap (listen-only vs filtering): rebuild it.
+        hotkeySub = Settings.shared.$hotkey.dropFirst().removeDuplicates().receive(on: RunLoop.main).sink { [weak self] _ in
+            DispatchQueue.main.async { self?.coordinator.hotkeys.restart() }
+        }
     }
 
     /// Self-report for troubleshooting: ~/Library/Application Support/Suikou/status.json
@@ -124,7 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "inputMonitoring": Permissions.inputMonitoring,
             "hotkeyTapActive": hk.isActive,
             "hotkeyTapHealthy": hk.isHealthy,
-            "hotkey": Settings.shared.hotkey.rawValue,
+            "hotkey": Settings.shared.hotkey.keycap,
             "hotkeyState": "\(hk.state)",
             "lastModifierKeyCode": hk.lastFlagsKeyCode,
             "lastModifierAt": hk.lastFlagsAt.map { fmt.string(from: $0) } ?? "never",

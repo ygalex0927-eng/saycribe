@@ -12,8 +12,41 @@ enum UnitTests {
     static func run() -> Never {
         permissions()
         clipboard()
+        hotkeys()
         print("\(passed) passed, \(failures) failed")
         exit(failures == 0 ? 0 : 1)
+    }
+
+    // MARK: - #13 custom hotkey
+
+    static func hotkeys() {
+        let cmd = CGEventFlags.maskCommand.rawValue, opt = CGEventFlags.maskAlternate.rawValue
+        let ctrl = CGEventFlags.maskControl.rawValue, shift = CGEventFlags.maskShift.rawValue
+        let rcmd = HotkeySpec(keyCode: 54, modifierOnly: true)
+        check(rcmd.isDown(CGEventFlags(rawValue: cmd | 0x10)), "hk: right cmd down")
+        check(!rcmd.isDown(CGEventFlags(rawValue: cmd | 0x08)), "hk: left cmd is not right cmd")
+        check(HotkeySpec.fn.isDown(.maskSecondaryFn), "hk: fn")
+        let combo = HotkeySpec(keyCode: 49, modifiers: ctrl | opt, modifierOnly: false)
+        check(combo.keycap == "⌃⌥Space", "hk: keycap \(combo.keycap)")
+        check(combo.matches(keyCode: 49, flags: CGEventFlags(rawValue: ctrl | opt | 0x100)), "hk: combo matches (ignores device bits)")
+        check(combo.matches(keyCode: 49, flags: CGEventFlags(rawValue: ctrl | opt | CGEventFlags.maskSecondaryFn.rawValue)), "hk: ignores fn flag")
+        check(!combo.matches(keyCode: 49, flags: CGEventFlags(rawValue: ctrl | opt | shift)), "hk: extra modifier rejects")
+        check(!combo.matches(keyCode: 49, flags: CGEventFlags(rawValue: ctrl)), "hk: missing modifier rejects")
+        check(!rcmd.matches(keyCode: 54, flags: CGEventFlags(rawValue: cmd)), "hk: modifier-only never matches as combo")
+        check(HotkeySpec.problem(combo) == nil, "hk: ⌃⌥Space ok")
+        check(HotkeySpec.problem(HotkeySpec(keyCode: 96, modifierOnly: false)) == nil, "hk: bare F5 ok")
+        check(HotkeySpec.problem(HotkeySpec(keyCode: 0, modifierOnly: false)) != nil, "hk: bare A rejected")
+        check(HotkeySpec.problem(HotkeySpec(keyCode: 0, modifiers: shift, modifierOnly: false)) != nil, "hk: ⇧A rejected")
+        check(HotkeySpec.problem(HotkeySpec(keyCode: 8, modifiers: cmd, modifierOnly: false)) != nil, "hk: ⌘C rejected")
+        check(HotkeySpec.problem(HotkeySpec(keyCode: 53, modifiers: ctrl, modifierOnly: false)) != nil, "hk: Esc rejected")
+        check(HotkeySpec.problem(HotkeySpec(keyCode: 49, modifiers: ctrl, modifierOnly: false)) != nil, "hk: ⌃Space (input source) rejected")
+        check(HotkeySpec.legacy("rightOption") == HotkeySpec(keyCode: 61, modifierOnly: true), "hk: legacy migration")
+        let data = try! JSONEncoder().encode(combo)
+        check((try? JSONDecoder().decode(HotkeySpec.self, from: data)) == combo, "hk: codable")
+        check(TranslateCombo.cmdOpt.matches(CGEventFlags(rawValue: cmd | opt | 0x10)), "tr: ⌘⌥")
+        check(!TranslateCombo.cmdOpt.matches(CGEventFlags(rawValue: cmd | opt | shift)), "tr: ⌘⌥⇧ no")
+        check(TranslateCombo.ctrlOpt.matches(CGEventFlags(rawValue: ctrl | opt)), "tr: ⌃⌥")
+        check(!TranslateCombo.off.matches(CGEventFlags(rawValue: cmd | opt)), "tr: off")
     }
 
     // MARK: - #15 selection fallback, clipboard restore
