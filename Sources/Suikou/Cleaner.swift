@@ -2,119 +2,211 @@ import Foundation
 
 /// Settings captured on the main thread when a dictation starts, so background work never reads live Settings.
 struct LLMConfig {
-    let apiKey: String
-    let cleanModel: String
-    let editModel: String
+    let relayToken: String
+    let relayBaseURL: String
     let dictionary: [String]
 
     static func snapshot() -> LLMConfig {
         let s = Settings.shared
-        return LLMConfig(apiKey: s.apiKey, cleanModel: s.cleanModel, editModel: s.editModel, dictionary: s.dictionary)
+        return LLMConfig(relayToken: s.relayToken, relayBaseURL: s.relayBaseURL, dictionary: s.dictionary)
+    }
+
+    var baseURL: URL {
+        let raw = relayBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let s = raw.isEmpty ? RelayBootstrap.defaultBaseURL : raw
+        return URL(string: s.hasSuffix("/") ? String(s.dropLast()) : s) ?? URL(string: RelayBootstrap.defaultBaseURL)!
     }
 }
 
-/// Turns a raw transcript into the text the user meant to type, via DeepSeek (thinking disabled for latency).
+/// Turns a raw transcript into the text the user meant to type, via the Saycribe relay (docs/中转接口.md v1.1).
+/// Prompts and model live on the server; the client only sends transcript / style / dictionary.
 final class Cleaner {
-    private let endpoint = URL(string: "https://api.deepseek.com/chat/completions")!
     private let session: URLSession = {
         let cfg = URLSessionConfiguration.default
-        cfg.httpMaximumConnectionsPerHost = 2
-        cfg.timeoutIntervalForRequest = 15
+        cfg.httpMaximumConnectionsPerHost = 4
+        cfg.timeoutIntervalForRequest = 30
+        cfg.timeoutIntervalForResource = 60
+        cfg.waitsForConnectivity = false
+        cfg.httpAdditionalHeaders = ["Accept": "application/json"]
         return URLSession(configuration: cfg)
     }()
 
-    private let cleanPrompt: String
-    private let editPrompt: String
-    private let translatePrompt: String
-    private let interpretPrompt: String
-    private let styles: [String: String]
+    /// Kept for call-site compatibility; prompts are no longer loaded locally.
+    init(resources: URL) {}
 
-    init(resources: URL) {
-        let dir = resources.appendingPathComponent("prompts")
-        cleanPrompt = (try? String(contentsOf: dir.appendingPathComponent("clean.md"), encoding: .utf8)) ?? ""
-        editPrompt = (try? String(contentsOf: dir.appendingPathComponent("edit.md"), encoding: .utf8)) ?? ""
-        translatePrompt = (try? String(contentsOf: dir.appendingPathComponent("translate.md"), encoding: .utf8)) ?? ""
-        interpretPrompt = (try? String(contentsOf: dir.appendingPathComponent("interpret.md"), encoding: .utf8)) ?? ""
-        let data = (try? Data(contentsOf: dir.appendingPathComponent("styles.json"))) ?? Data()
-        styles = (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
-    }
-
-    /// Opens the TLS connection while the user is still talking, so the real request skips the handshake.
-    func warmUp(apiKey key: String) {
-        guard !key.isEmpty else { return }
-        var req = URLRequest(url: URL(string: "https://api.deepseek.com/models")!)
-        req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+    /// GET /v1/ping (no auth) so TLS + keep-alive are warm before the user releases the hotkey.
+    func warmUp(baseURL: URL) {
+        let url = baseURL.appendingPathComponent("v1/ping")
+        var req = URLRequest(url: url, timeoutInterval: 8)
+        req.httpMethod = "GET"
         session.dataTask(with: req).resume()
     }
 
-    func clean(_ transcript: String, style: AppStyle, config: LLMConfig) async throws -> String {
-        // Keep in sync with eval/run_eval.py build_user_msg
-        var parts = [styles[style.rawValue] ?? ""]
-        if !config.dictionary.isEmpty { parts.append("【个人词典】" + config.dictionary.joined(separator: "、")) }
-        parts.append("<transcript>\(transcript)</transcript>")
-        return try await complete(key: config.apiKey, model: config.cleanModel, system: cleanPrompt, user: parts.joined(separator: "\n"),
-                                  timeout: 4 + Double(transcript.count) * 0.02)
-    }
-
-    func translate(_ transcript: String, direction: String, style: AppStyle, config: LLMConfig) async throws -> String {
-        var parts = ["【翻译方向】\(direction)", styles[style.rawValue] ?? ""]
-        if !config.dictionary.isEmpty { parts.append("【个人词典】" + config.dictionary.joined(separator: "、")) }
-        parts.append("<transcript>\(transcript)</transcript>")
-        return try await complete(key: config.apiKey, model: config.cleanModel, system: translatePrompt, user: parts.joined(separator: "\n"),
-                                  timeout: 5 + Double(transcript.count) * 0.03)
-    }
-
-    /// Meeting interpreting: one spoken Chinese sentence → English to be read aloud. `context` is what was said just before.
-    func interpret(_ transcript: String, context: [String], config: LLMConfig) async throws -> String {
-        var parts: [String] = []
-        if !context.isEmpty { parts.append("【前文】\n" + context.joined(separator: "\n")) }
-        if !config.dictionary.isEmpty { parts.append("【个人词典】" + config.dictionary.joined(separator: "、")) }
-        parts.append("<transcript>\(transcript)</transcript>")
-        return try await complete(key: config.apiKey, model: config.cleanModel, system: interpretPrompt, user: parts.joined(separator: "\n"),
-                                  timeout: 6 + Double(transcript.count) * 0.03)
-    }
-
-    func edit(selection: String, instruction: String, config: LLMConfig) async throws -> String {
-        let user = "<selection>\(selection)</selection>\n<instruction>\(instruction)</instruction>"
-        return try await complete(key: config.apiKey, model: config.editModel, system: editPrompt, user: user,
-                                  timeout: 6 + Double(selection.count) * 0.03)
-    }
-
-    private func complete(key: String, model: String, system: String, user: String, timeout: TimeInterval) async throws -> String {
-        guard !key.isEmpty else { throw CleanerError.noKey }
-        var req = URLRequest(url: endpoint, timeoutInterval: timeout)
-        req.httpMethod = "POST"
-        req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: Any] = [
-            "model": model,
-            "temperature": 0.2,
-            "thinking": ["type": "disabled"],
-            "messages": [["role": "system", "content": system], ["role": "user", "content": user]],
-        ]
-        req.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (data, resp) = try await session.data(for: req)
+    /// Public ping for Settings "测试连接" / selftest. Returns api_version or throws.
+    func ping(baseURL: URL) async throws -> String {
+        let url = baseURL.appendingPathComponent("v1/ping")
+        var req = URLRequest(url: url, timeoutInterval: 8)
+        req.httpMethod = "GET"
+        let (data, resp) = try await data(for: req)
         guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
             throw CleanerError.http((resp as? HTTPURLResponse)?.statusCode ?? -1, String(data: data, encoding: .utf8) ?? "")
         }
-        struct Reply: Decodable {
-            struct Choice: Decodable { struct Msg: Decodable { let content: String? }; let message: Msg }
-            let choices: [Choice]
+        struct Pong: Decodable { let ok: Bool?; let api_version: String? }
+        let pong = try JSONDecoder().decode(Pong.self, from: data)
+        return pong.api_version ?? "ok"
+    }
+
+    /// GET /v1/me — validates the device token.
+    func me(config: LLMConfig) async throws -> (user: String, platform: String, device: String, tokenId: String) {
+        guard !config.relayToken.isEmpty else { throw CleanerError.noToken }
+        var req = URLRequest(url: config.baseURL.appendingPathComponent("v1/me"), timeoutInterval: 8)
+        req.httpMethod = "GET"
+        req.setValue("Bearer \(config.relayToken)", forHTTPHeaderField: "Authorization")
+        let (data, resp) = try await data(for: req)
+        try throwIfRelayError(data: data, resp: resp)
+        struct Me: Decodable {
+            let user: String?
+            let platform: String?
+            let device: String?
+            let token_id: String?
         }
+        let me = try JSONDecoder().decode(Me.self, from: data)
+        return (me.user ?? "", me.platform ?? "", me.device ?? "", me.token_id ?? "")
+    }
+
+    func clean(_ transcript: String, style: AppStyle, config: LLMConfig,
+               sessionId: String? = nil, seq: Int? = nil, context: String? = nil, final: Bool? = nil) async throws -> String {
+        var body: [String: Any] = [
+            "transcript": transcript,
+            "style": style.rawValue,
+            "stream": false,
+        ]
+        if !config.dictionary.isEmpty { body["dictionary"] = config.dictionary }
+        if let sessionId { body["session_id"] = sessionId }
+        if let seq { body["seq"] = seq }
+        if let context, !context.isEmpty { body["context"] = context }
+        if let final { body["final"] = final }
+        return try await post(path: "v1/clean", body: body, config: config,
+                              timeout: 4 + Double(transcript.count) * 0.02)
+    }
+
+    func translate(_ transcript: String, direction: String, style: AppStyle, config: LLMConfig) async throws -> String {
+        var body: [String: Any] = [
+            "transcript": transcript,
+            "direction": direction,
+            "style": style.rawValue,
+            "stream": false,
+        ]
+        if !config.dictionary.isEmpty { body["dictionary"] = config.dictionary }
+        return try await post(path: "v1/translate", body: body, config: config,
+                              timeout: 5 + Double(transcript.count) * 0.03)
+    }
+
+    func interpret(_ transcript: String, context: [String], config: LLMConfig) async throws -> String {
+        var body: [String: Any] = [
+            "transcript": transcript,
+            "stream": false,
+        ]
+        if !context.isEmpty { body["context"] = context }
+        if !config.dictionary.isEmpty { body["dictionary"] = config.dictionary }
+        return try await post(path: "v1/interpret", body: body, config: config,
+                              timeout: 6 + Double(transcript.count) * 0.03)
+    }
+
+    func edit(selection: String, instruction: String, config: LLMConfig) async throws -> String {
+        let body: [String: Any] = [
+            "selection": selection,
+            "instruction": instruction,
+            "stream": false,
+        ]
+        return try await post(path: "v1/edit", body: body, config: config,
+                              timeout: 6 + Double(selection.count) * 0.03)
+    }
+
+    // MARK: - HTTP
+
+    private func post(path: String, body: [String: Any], config: LLMConfig, timeout: TimeInterval) async throws -> String {
+        guard !config.relayToken.isEmpty else { throw CleanerError.noToken }
+        var req = URLRequest(url: config.baseURL.appendingPathComponent(path), timeoutInterval: max(timeout, 5))
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(config.relayToken)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, resp) = try await data(for: req)
+        try throwIfRelayError(data: data, resp: resp)
+        struct Reply: Decodable { let text: String? }
         let reply = try JSONDecoder().decode(Reply.self, from: data)
-        return (reply.choices.first?.message.content ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return (reply.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func data(for req: URLRequest) async throws -> (Data, URLResponse) {
+        do {
+            return try await session.data(for: req)
+        } catch let err as URLError {
+            throw mapURLError(err)
+        } catch {
+            if let urlErr = error as? URLError { throw mapURLError(urlErr) }
+            // Nested URLError under Cancellation / NSError bridge
+            let ns = error as NSError
+            if ns.domain == NSURLErrorDomain {
+                throw CleanerError.offline
+            }
+            throw error
+        }
+    }
+
+    private func mapURLError(_ err: URLError) -> CleanerError {
+        switch err.code {
+        case .notConnectedToInternet, .networkConnectionLost, .cannotFindHost,
+             .cannotConnectToHost, .dnsLookupFailed, .timedOut,
+             .internationalRoamingOff, .dataNotAllowed, .secureConnectionFailed:
+            return .offline
+        default:
+            return .offline
+        }
+    }
+
+    private func throwIfRelayError(data: Data, resp: URLResponse) throws {
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        if code == 200 { return }
+        struct ErrBody: Decodable {
+            struct E: Decodable { let code: String?; let message: String? }
+            let error: E?
+        }
+        let parsed = try? JSONDecoder().decode(ErrBody.self, from: data)
+        let errCode = parsed?.error?.code ?? ""
+        let message = parsed?.error?.message ?? (String(data: data, encoding: .utf8) ?? "")
+        switch code {
+        case 401, 403:
+            throw CleanerError.unauthorized
+        case 429:
+            throw CleanerError.http(code, message.isEmpty ? "rate_limited" : message)
+        case 502, 503, 504:
+            throw CleanerError.http(code, message.isEmpty ? errCode : message)
+        default:
+            throw CleanerError.http(code, message.isEmpty ? errCode : message)
+        }
     }
 }
 
-enum CleanerError: LocalizedError {
-    case noKey
+enum CleanerError: LocalizedError, Equatable {
+    case noToken
+    case unauthorized
+    case offline
     case http(Int, String)
 
     var errorDescription: String? {
         switch self {
-        case .noKey: return "未设置 DeepSeek API Key"
-        case let .http(code, body): return "DeepSeek \(code): \(body.prefix(120))"
+        case .noToken: return "请在设置里填写中转 token"
+        case .unauthorized: return "请在设置里填写/重新获取 token"
+        case .offline: return "需要联网"
+        case let .http(code, body): return "中转 \(code): \(body.prefix(120))"
         }
+    }
+
+    /// True when the HUD should show exactly 「需要联网」.
+    var isOffline: Bool {
+        if case .offline = self { return true }
+        return false
     }
 }

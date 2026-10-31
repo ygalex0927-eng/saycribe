@@ -32,7 +32,7 @@ enum RecordMode: String, CaseIterable, Identifiable {
     }
 }
 
-/// User preferences, persisted in UserDefaults. The API key lives in ~/.config/suikou/secrets.env (chmod 600).
+/// User preferences, persisted in UserDefaults. The relay device token lives in the keychain; base URL is configurable.
 final class Settings: ObservableObject {
     static let shared = Settings()
     private let d = UserDefaults.standard
@@ -47,7 +47,10 @@ final class Settings: ObservableObject {
     /// bundle id → AppStyle raw value, set on the settings page; beats AppStyle.forBundle.
     @Published var styleOverrides: [String: String] { didSet { d.set(styleOverrides, forKey: "styleOverrides") } }
     @Published var dictionaryText: String { didSet { d.set(dictionaryText, forKey: "dictionary") } }
-    @Published var apiKey: String { didSet { Self.saveKey(apiKey) } }
+    /// Saycribe relay base URL (no trailing slash). Default from docs / .relay-tokens.env.
+    @Published var relayBaseURL: String { didSet { d.set(relayBaseURL, forKey: "relayBaseURL") } }
+    /// Device token `sct_…` stored in the keychain — never logged.
+    @Published var relayToken: String { didSet { KeychainStore.save(relayToken) } }
     /// CoreAudio UID of the chosen microphone; empty = follow the system default.
     @Published var micUID: String { didSet { d.set(micUID, forKey: "micUID") } }
     @Published var playSounds: Bool { didSet { d.set(playSounds, forKey: "playSounds") } }
@@ -76,7 +79,7 @@ final class Settings: ObservableObject {
     }
 
     @Published var translateTarget: String { didSet { d.set(translateTarget, forKey: "translateTarget") } }
-    /// Utterances of at most `shortSentenceLimit` words are cleaned on-device instead of calling DeepSeek.
+    /// Kept for prefs migration; short utterances now always go through the relay (non-streaming).
     @Published var skipShortSentences: Bool { didSet { d.set(skipShortSentences, forKey: "skipShortSentences") } }
     @Published var shortSentenceLimit: Int { didSet { d.set(shortSentenceLimit, forKey: "shortSentenceLimit") } }
     static let shortSentenceLimits = [6, 12, 20, 30]
@@ -132,7 +135,8 @@ final class Settings: ObservableObject {
         asrLanguage = d.string(forKey: "asrLanguage") ?? "auto"
         styleOverrides = d.dictionary(forKey: "styleOverrides") as? [String: String] ?? [:]
         dictionaryText = d.string(forKey: "dictionary") ?? ""
-        apiKey = Self.loadKey()
+        relayBaseURL = d.string(forKey: "relayBaseURL") ?? ""
+        relayToken = KeychainStore.load()
         micUID = d.string(forKey: "micUID") ?? ""
         playSounds = d.object(forKey: "playSounds") as? Bool ?? true
         keepInClipboard = d.bool(forKey: "keepInClipboard")
@@ -150,25 +154,20 @@ final class Settings: ObservableObject {
         interpretSpeed = d.object(forKey: "interpretSpeed") as? Double ?? 1.0
         interpretPassEnglish = d.bool(forKey: "interpretPassEnglish")
         launchAtLogin = SMAppService.mainApp.status == .enabled
-    }
-
-    // MARK: - API key file
-
-    static let secretsURL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".config/suikou/secrets.env")
-
-    private static func loadKey() -> String {
-        guard let text = try? String(contentsOf: secretsURL, encoding: .utf8) else { return "" }
-        for line in text.split(whereSeparator: \.isNewline) where line.hasPrefix("DEEPSEEK_API_KEY=") {
-            return String(line.dropFirst("DEEPSEEK_API_KEY=".count)).trimmingCharacters(in: .whitespaces)
+        // Fill empty relay URL/token from the gitignored env file (dev / first run).
+        RelayBootstrap.applyIfNeeded(to: self)
+        if relayBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            relayBaseURL = RelayBootstrap.defaultBaseURL
         }
-        return ""
     }
 
-    private static func saveKey(_ key: String) {
-        let fm = FileManager.default
-        try? fm.createDirectory(at: secretsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? "DEEPSEEK_API_KEY=\(key)\n".write(to: secretsURL, atomically: true, encoding: .utf8)
-        try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: secretsURL.path)
+    // MARK: - Relay bootstrap
+
+    /// Import URL/token from platforms/mac/.relay-tokens.env when keychain/URL are empty.
+    func ensureRelayConfigured() {
+        RelayBootstrap.applyIfNeeded(to: self)
+        if relayBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            relayBaseURL = RelayBootstrap.defaultBaseURL
+        }
     }
 }

@@ -1,0 +1,7 @@
+# 设备 token，绝不提交
+.relay-tokens.env
+*.xcodeproj/
+build/
+DerivedData/
+xcuserdata/
+Vendor/

@@ -1,0 +1,18 @@
+[Unit]
+Description=Saycribe LLM relay
+After=network-online.target
+[Service]
+User=saycribe
+EnvironmentFile=/etc/saycribe-relay/relay.env
+ExecStart=/usr/bin/python3 /opt/saycribe-relay/relay.py
+Restart=always
+RestartSec=2
+MemoryMax=300M
+CPUQuota=80%
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/saycribe-relay
+ProtectHome=true
+PrivateTmp=true
+[Install]
+WantedBy=multi-user.target

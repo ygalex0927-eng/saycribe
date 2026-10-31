@@ -28,16 +28,48 @@ enum SelfTest {
         print(String(format: "asr    %.0fms  (%.1fs audio, %d segments)  %@", Date().timeIntervalSince(t) * 1000, seconds, parts.count, raw))
         for (i, p) in parts.enumerated() { print("  seg\(i + 1): \(p)") }
 
+        Settings.shared.ensureRelayConfigured()
         let cleaner = Cleaner(resources: resources)
+        let config = LLMConfig.snapshot()
         let sem = DispatchSemaphore(value: 0)
+
+        // #1: warm keep-alive, then measure clean (press-to-text proxy after preconnect).
         t = Date()
         Task {
             do {
-                let config = LLMConfig.snapshot()
-                let out = try await Segmenter.cleanAll(parts) { try await cleaner.clean($0, style: style, config: config) }
+                let ver = try await cleaner.ping(baseURL: config.baseURL)
+                print(String(format: "ping   %.0fms  api_version=%@", Date().timeIntervalSince(t) * 1000, ver))
+            } catch {
+                print("ping failed: \(error.localizedDescription)")
+            }
+            sem.signal()
+        }
+        sem.wait()
+
+        t = Date()
+        Task {
+            do {
+                let sessionId = UUID().uuidString
+                let out = try await Segmenter.cleanAll(parts) { piece, seq, context, final in
+                    try await cleaner.clean(piece, style: style, config: config,
+                                            sessionId: sessionId, seq: seq, context: context, final: final)
+                }
                 print(String(format: "clean  %.0fms  [%@]  %@", Date().timeIntervalSince(t) * 1000, style.rawValue, out))
             } catch {
                 print("clean failed: \(error.localizedDescription)")
+            }
+            sem.signal()
+        }
+        sem.wait()
+
+        // Second clean on keep-alive connection (preconnect already done).
+        t = Date()
+        Task {
+            do {
+                let out = try await cleaner.clean(raw, style: style, config: config, sessionId: UUID().uuidString, seq: 0, final: true)
+                print(String(format: "clean2 %.0fms (after warm)  %@", Date().timeIntervalSince(t) * 1000, out))
+            } catch {
+                print("clean2 failed: \(error.localizedDescription)")
             }
             sem.signal()
         }

@@ -140,7 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             "lastModifierKeyCode": hk.lastFlagsKeyCode,
             "lastModifierAt": hk.lastFlagsAt.map { fmt.string(from: $0) } ?? "never",
             "modelReady": coordinator.isModelReady,
-            "apiKeySet": !Settings.shared.apiKey.isEmpty,
+            "relayTokenSet": !Settings.shared.relayToken.isEmpty,
             "historyCount": coordinator.history.entries.count,
             "interpreter": [
                 "phase": "\(coordinator.interpreter.phase)",
@@ -233,14 +233,6 @@ if CommandLine.arguments.contains("--mic-test") {
         } catch {
             print("round \(round): start failed (no crash): \(error.localizedDescription)")
         }
-    }
-    exit(0)
-}
-if let i = CommandLine.arguments.firstIndex(of: "--local-clean") {
-    // `--local-clean STYLE TEXT...` prints LocalCleaner output per line, for checking the short-sentence path.
-    let style = AppStyle(rawValue: CommandLine.arguments[i + 1]) ?? .notes
-    for text in CommandLine.arguments[(i + 2)...] {
-        print("\(text)  →  [\(LocalCleaner.clean(text, style: style))]  (\(Stats.count(text)) 字)")
     }
     exit(0)
 }

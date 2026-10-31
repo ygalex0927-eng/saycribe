@@ -1,3 +1,22 @@
+# Saycribe（代号 suikou）
+
+## 仓库结构 / 分支
+| 分支 | 内容 |
+|---|---|
+| main | 完整 monorepo |
+| mac | macOS 客户端（根目录 Sources/Suikou + Package.swift）|
+| mac-intel | Intel Mac 构建（同 mac 源码）|
+| ios | platforms/ios（iOS / iPadOS + 键盘扩展）|
+| android | platforms/android |
+| linux | platforms/linux |
+| windows | Windows 客户端（代码在 4060 上，稍后补）|
+| relay | 中转服务/ |
+| core | platforms/core（Rust 共享识别核心，C ABI）|
+
+密钥不入库：设备 token、DeepSeek key、管理 token 均通过环境变量 / 本地 `.relay-tokens.env`（已 gitignore）提供。
+
+---
+
 # Saycribe
 
 按住一个键说话，松开后，整理好的文字出现在光标处。对标 Typeless，macOS 版。

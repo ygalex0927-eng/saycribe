@@ -39,14 +39,21 @@ enum Segmenter {
         return split(samples, vad: vad).map { recognizer.transcribe($0) }.filter { !$0.isEmpty }
     }
 
-    /// Cleans pieces concurrently (keeps order). Pieces are grouped up to ~400 chars so each call has context.
-    static func cleanAll(_ parts: [String], _ clean: @escaping (String) async throws -> String) async throws -> String {
+    /// Cleans pieces in order (grouped up to ~400 chars). Passes seq / trailing context / final for the relay.
+    static func cleanAll(_ parts: [String],
+                         _ clean: @escaping (_ text: String, _ seq: Int, _ context: String?, _ final: Bool) async throws -> String) async throws -> String {
         let groups = group(parts, limit: 400)
-        let outs = try await withThrowingTaskGroup(of: (Int, String).self) { g in
-            for (i, text) in groups.enumerated() { g.addTask { (i, try await clean(text)) } }
-            var r = [String](repeating: "", count: groups.count)
-            for try await (i, s) in g { r[i] = s }
-            return r
+        guard !groups.isEmpty else { return "" }
+        var outs: [String] = []
+        var cleanedSoFar = ""
+        for (i, text) in groups.enumerated() {
+            let ctx: String? = cleanedSoFar.isEmpty ? nil : String(cleanedSoFar.suffix(300))
+            let out = try await clean(text, i, ctx, i == groups.count - 1)
+            outs.append(out)
+            if !out.isEmpty {
+                if !cleanedSoFar.isEmpty { cleanedSoFar += "\n" }
+                cleanedSoFar += out
+            }
         }
         return outs.filter { !$0.isEmpty }.joined(separator: "\n")
     }

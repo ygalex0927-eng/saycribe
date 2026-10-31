@@ -1,0 +1,142 @@
+name: Saycribe
+options:
+  bundleIdPrefix: com.motomotos
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    DEVELOPMENT_TEAM: B7Z9AC87NF
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  SaycribeCore:
+    type: framework
+    platform: iOS
+    sources:
+      - path: SaycribeCore
+        excludes: [include/**]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.motomotos.saycribe.core
+        APPLICATION_EXTENSION_API_ONLY: YES
+        GENERATE_INFOPLIST_FILE: YES
+        SKIP_INSTALL: YES
+        HEADER_SEARCH_PATHS: "$(SRCROOT)/SaycribeCore/include $(inherited)"
+        OTHER_CFLAGS: "-I$(SRCROOT)/SaycribeCore/include"
+  SaycribeCoreTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [SaycribeCoreTests]
+    dependencies:
+      - target: SaycribeCore
+      - target: SaycribeApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.motomotos.saycribe.coretests
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/SaycribeApp.app/SaycribeApp"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        GENERATE_INFOPLIST_FILE: YES
+  SaycribeApp:
+    type: application
+    platform: iOS
+    sources: [SaycribeApp]
+    dependencies:
+      - target: SaycribeCore
+      - target: SaycribeKeyboard
+      - framework: Vendor/SherpaOnnxC.xcframework
+        embed: true
+    entitlements:
+      path: SaycribeApp/SaycribeApp.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.motomotos.saycribe]
+        keychain-access-groups: ["$(AppIdentifierPrefix)com.motomotos.saycribe.shared"]
+    info:
+      path: SaycribeApp/Info.plist
+      properties:
+        CFBundleDisplayName: Saycribe
+        AppIdentifierPrefix: $(AppIdentifierPrefix)
+        UILaunchScreen: {}
+        NSMicrophoneUsageDescription: Saycribe 需要麦克风来把你的语音转成文字。
+        UIBackgroundModes: [audio]
+        CFBundleURLTypes:
+          - CFBundleURLSchemes: [saycribe]
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight, UIInterfaceOrientationPortraitUpsideDown]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.motomotos.saycribe
+        # 真识别库只链主 App（键盘扩展不链）。由 scripts/build-core-ios.sh 产出。
+        LIBRARY_SEARCH_PATHS[sdk=iphoneos*]: "$(SRCROOT)/Vendor/core/ios-arm64"
+        LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]: "$(SRCROOT)/Vendor/core/ios-arm64-simulator"
+        OTHER_LDFLAGS: "$(inherited) -lsaycribe_core -lc++ -framework Accelerate"
+    # SherpaOnnxC 动态 xcframework（内含静态 onnxruntime），embed 进 App
+    # dependencies 追加: - framework: Vendor/SherpaOnnxC.xcframework (embed: true)
+  SaycribeAppTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [SaycribeAppTests]
+    dependencies:
+      - target: SaycribeApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.motomotos.saycribe.apptests
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/SaycribeApp.app/SaycribeApp"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        GENERATE_INFOPLIST_FILE: YES
+  SaycribeKeyboard:
+    type: app-extension
+    platform: iOS
+    sources: [SaycribeKeyboard]
+    dependencies:
+      - target: SaycribeCore
+        embed: false
+    entitlements:
+      path: SaycribeKeyboard/SaycribeKeyboard.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.motomotos.saycribe]
+        keychain-access-groups: ["$(AppIdentifierPrefix)com.motomotos.saycribe.shared"]
+    info:
+      path: SaycribeKeyboard/Info.plist
+      properties:
+        CFBundleDisplayName: Saycribe
+        AppIdentifierPrefix: $(AppIdentifierPrefix)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.keyboard-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
+          NSExtensionAttributes:
+            IsASCIICapable: false
+            PrefersRightToLeft: false
+            PrimaryLanguage: zh-Hans
+            RequestsOpenAccess: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.motomotos.saycribe.keyboard
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+        APPLICATION_EXTENSION_API_ONLY: YES
+  DesignPreview:
+    type: application
+    platform: iOS
+    sources: [DesignPreview]
+    info:
+      path: DesignPreview/Info.plist
+      properties:
+        CFBundleDisplayName: SaycribeDesign
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight, UIInterfaceOrientationPortraitUpsideDown]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.motomotos.saycribe.designpreview
+        TARGETED_DEVICE_FAMILY: "1,2"
+
+schemes:
+  SaycribeApp:
+    build:
+      targets: {SaycribeApp: all, SaycribeCore: all, SaycribeKeyboard: all}
+    test:
+      targets: [SaycribeCoreTests, SaycribeAppTests]
+  DesignPreview:
+    build:
+      targets: {DesignPreview: all}

@@ -797,43 +797,25 @@ struct SettingsPage: View {
 
             SectionLabel(text: "AI 整理")
             Card {
-                Row(title: "整理口语", subtitle: "去掉口头禅和重复，听懂改口，补标点、排列表。关闭后只在本机做简单整理。") {
+                Row(title: "整理口语", subtitle: "去掉口头禅和重复，听懂改口，补标点、排列表。关闭后直接写入识别原文。整理/改写/翻译/同传都走中转服务。") {
                     Toggle("", isOn: $settings.llmEnabled).toggleStyle(.switch).labelsHidden().tint(Brand.accent)
-                }
-                RowDivider()
-                Row(title: "短句不调用 AI", subtitle: "不超过 \(settings.shortSentenceLimit) 个字的话在本机去掉口头禅、补好标点后直接写入，更快；长句仍交给 DeepSeek。翻译和改写不受影响。") {
-                    HStack(spacing: 10) {
-                        if settings.skipShortSentences {
-                            Picker("", selection: $settings.shortSentenceLimit) {
-                                ForEach(Settings.shortSentenceLimits, id: \.self) { Text("≤ \($0) 字").tag($0) }
-                            }
-                            .labelsHidden().fixedSize()
-                        }
-                        Toggle("", isOn: $settings.skipShortSentences).toggleStyle(.switch).labelsHidden().tint(Brand.accent)
-                    }
-                }
-                RowDivider()
-                Row(title: "整理模型") {
-                    Picker("", selection: $settings.cleanModel) {
-                        ForEach(Settings.models, id: \.self) { Text($0).tag($0) }
-                    }
-                    .labelsHidden().fixedSize()
-                }
-                RowDivider()
-                Row(title: "改写模型", subtitle: "选中文字后说话，用来执行修改指令。") {
-                    Picker("", selection: $settings.editModel) {
-                        ForEach(Settings.models, id: \.self) { Text($0).tag($0) }
-                    }
-                    .labelsHidden().fixedSize()
                 }
                 RowDivider()
                 AppStyleRows(settings: settings)
                 RowDivider()
-                Row(title: "DeepSeek API Key") {
-                    SecureField("sk-…", text: $settings.apiKey)
+                Row(title: "中转地址", subtitle: "默认 https://saycribe-api.motomotos.com，可改成其它节点或本地调试地址。") {
+                    TextField("https://…", text: $settings.relayBaseURL)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 260)
+                }
+                RowDivider()
+                Row(title: "设备 Token", subtitle: "每台 Mac 一个；存在钥匙串，不会进 git。") {
+                    SecureField("sct_…", text: $settings.relayToken)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 220)
                 }
+                RowDivider()
+                RelayTestRow(settings: settings)
             }
 
             SectionLabel(text: "通用")
@@ -893,7 +875,7 @@ struct SettingsPage: View {
 
             HStack(spacing: 6) {
                 Image(systemName: "lock").font(.system(size: 11))
-                Text("录音只在本机识别，不会上传。发给 DeepSeek 的只有识别出的文字，以及改写时选中的文字。")
+                Text("录音只在本机识别，不会上传。发给中转的只有识别出的文字，以及改写时选中的文字。断网时无法整理，会提示「需要联网」。")
             }
             .font(.system(size: 11.5))
             .foregroundStyle(.tertiary)
@@ -1037,6 +1019,46 @@ struct AppStyleRows: View {
                     .buttonStyle(.plain)
             }
             .padding(.horizontal, 16).padding(.vertical, 6).padding(.leading, 12)
+        }
+    }
+}
+
+
+struct RelayTestRow: View {
+    @ObservedObject var settings: Settings
+    @State private var status = ""
+    @State private var busy = false
+
+    var body: some View {
+        Row(title: "测试连接", subtitle: status.isEmpty ? "调用 /v1/ping 与 /v1/me，确认地址和 token。" : status) {
+            Button(busy ? "测试中…" : "测试") {
+                busy = true
+                status = ""
+                settings.ensureRelayConfigured()
+                let cleaner = Cleaner(resources: URL(fileURLWithPath: "/"))
+                let config = LLMConfig.snapshot()
+                Task {
+                    do {
+                        let ver = try await cleaner.ping(baseURL: config.baseURL)
+                        let me = try await cleaner.me(config: config)
+                        await MainActor.run {
+                            status = "OK · api \(ver) · \(me.user)/\(me.platform)/\(me.device)"
+                            busy = false
+                        }
+                    } catch {
+                        await MainActor.run {
+                            if let e = error as? CleanerError, e.isOffline {
+                                status = "需要联网"
+                            } else {
+                                status = error.localizedDescription
+                            }
+                            busy = false
+                        }
+                    }
+                }
+            }
+            .buttonStyle(.bordered)
+            .disabled(busy)
         }
     }
 }

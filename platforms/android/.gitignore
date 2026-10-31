@@ -1,0 +1,7 @@
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+asr-jni/src/main/jniLibs/
+.relay-tokens.env

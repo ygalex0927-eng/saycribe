@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Meeting interpreter: microphone (Chinese) → VAD cuts at pauses → SenseVoice → DeepSeek → Kokoro → virtual mic (English).
+/// Meeting interpreter: microphone (Chinese) → VAD cuts at pauses → SenseVoice → 中转 → Kokoro → virtual mic (English).
 /// Meeting apps (Zoom, 腾讯会议…) pick the virtual cable (BlackHole) as their microphone, so the others hear only English.
 final class Interpreter: ObservableObject {
     /// Set by the Coordinator; the settings page uses it for preview and re-routing.
@@ -33,7 +33,7 @@ final class Interpreter: ObservableObject {
     /// Captured at start so the work queue never reads the coordinator's property.
     private var asr: Recognizer?
     private let work = DispatchQueue(label: "suikou.interpret", qos: .userInitiated)
-    /// Chains sentences so their English is spoken in the order they were said, even if DeepSeek answers out of order.
+    /// Chains sentences so their English is spoken in the order they were said, even if 中转 answers out of order.
     private var tail: Task<Void, Never>?
     private var nextID = 0
     private var speaking = false
@@ -53,7 +53,7 @@ final class Interpreter: ObservableObject {
     func start() {
         guard !isOn else { return }
         error = nil
-        guard !settings.apiKey.isEmpty else { fail("未设置 DeepSeek API Key"); return }
+        guard !settings.relayToken.isEmpty else { fail("请在设置里填写中转 token"); return }
         guard let asr = recognizer() else { fail("语音模型还在加载，请稍候"); return }
         self.asr = asr
         phase = .loading
@@ -83,7 +83,7 @@ final class Interpreter: ObservableObject {
             fail("音频设备不可用：\(error.localizedDescription)")
             return
         }
-        cleaner.warmUp(apiKey: settings.apiKey)
+        cleaner.warmUp(baseURL: LLMConfig.snapshot().baseURL)
         phase = .listening
     }
 

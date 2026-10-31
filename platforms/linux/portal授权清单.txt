@@ -1,0 +1,29 @@
+# xdg-desktop-portal 真会话待测清单（GNOME / KDE）
+时间：2026-10-31 Asia/Shanghai
+环境：Debian box — mutter 48 headless + xdg-desktop-portal 1.20 + portal-gnome 48（无 gnome-shell）
+
+## 本机已完成
+- [x] 代码：platforms/linux `wayland/portal.rs`（ashpd 0.11）
+  - GlobalShortcuts hold-to-talk → 失败回退 FIFO toggle
+  - RemoteDesktop paste(Ctrl[+Shift]+V) + keysym 打字；restore_token 持久化
+  - 剪贴板：wl-copy → xclip → portal type
+- [x] `--portal-caps`：RemoteDesktop / GlobalShortcuts / Clipboard 接口均 true
+  - AvailableDeviceTypes = Keyboard|Pointer|Touchscreen
+- [x] mutter 原生 `org.gnome.Mutter.RemoteDesktop`：CreateSession → Start → NotifyKeyboardKeysym → Stop 成功
+- [x] 单元测试 16/16；X11 自测 22/22；sway 回归 clip/app/wtype paste 通过
+- [ ] portal 授权弹窗自动批准：失败（无 gnome-shell；GTK 对话框未出现在 Xwayland 树；超时按设计返回）
+
+## 需真 GNOME/KDE 会话（交互一次）
+1. 启动桌面会话后运行 `saycribe --portal-caps`，确认三接口可用。
+2. `saycribe --portal-rd-test`：在弹窗中允许键盘（建议勾选记住/persist）；确认打印 `ok …` 且 `~/.local/share/saycribe/rd_restore_token` 生成。
+3. 再跑一次 `--portal-rd-test`：应不再弹窗（restore_token）。
+4. 焦点放在文本框，`saycribe --paste 'portal-ok'`：期望 method=PortalPaste 或 PortalType，文本出现。
+5. 绑定 GlobalShortcuts 热键：按住应 Press、松开 Release；撤销 portal 快捷键权限后应自动走 FIFO `saycribe --toggle`。
+6. GNOME（无 wlr-data-control）：卸/避开 wl-copy 时确认 xclip 或 portal type 仍能注入。
+7. KDE：装 `xdg-desktop-portal-kde` + `kwin_wayland --virtual`（或真会话）重复 1–5。
+
+## 不可自动测的原因
+- RemoteDesktop/GlobalShortcuts 的 Start 需用户确认；headless mutter 无 gnome-shell，portal-gnome 无法完成 Access UI。
+- 无现成 D-Bus「自动批准」开关；permission-store 预置对 host 应用不稳定。
+
+完整验收步骤见：方案文档/真机验收步骤-同意后一次跑完.md

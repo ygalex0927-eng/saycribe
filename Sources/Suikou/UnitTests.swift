@@ -57,7 +57,7 @@ enum UnitTests {
         let sem = DispatchSemaphore(value: 0)
         var joined = ""
         Task {
-            joined = (try? await Segmenter.cleanAll(["一", "二", "三"]) { s in
+            joined = (try? await Segmenter.cleanAll(["一", "二", "三"]) { s, _, _, _ in
                 try await Task.sleep(nanoseconds: UInt64.random(in: 1...20) * 1_000_000); return "[\(s)]" }) ?? "ERR"
             sem.signal()
         }

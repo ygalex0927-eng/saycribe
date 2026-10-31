@@ -1,0 +1,29 @@
+[package]
+name = "saycribe-linux"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+description = "Saycribe Linux client (X11 stage). Platform layer only; core logic lives in platforms/core (stubbed in src/core_stub until ready)."
+
+[features]
+default = ["tray", "core"]
+# Real recognition via platforms/core (SenseVoice + Silero VAD + pipeline::Session).
+core = ["dep:saycribe-core"]
+tray = ["dep:ksni"]
+
+[dependencies]
+x11rb = { version = "0.13", features = ["xtest", "xkb"] }
+ureq = { version = "2", default-features = false, features = ["tls", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ksni = { version = "0.3", optional = true, default-features = false, features = ["async-io", "blocking"] }
+
+saycribe-core = { path = "../core", optional = true }
+ashpd = { version = "0.11", default-features = false, features = ["tokio"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+futures-util = "0.3.34"
+
+[[bin]]
+name = "saycribe"
+path = "src/main.rs"
+

@@ -1,0 +1,3148 @@
+Reading additional input from stdin...
+OpenAI Codex v0.165.0-alpha.1.2
+--------
+workdir: /Users/zjh/claude-workdir/suikou/platforms/ios
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: high
+reasoning summaries: none
+session id: 01a18ffd-57d7-7f31-9331-d832e7178cf3
+--------
+user
+目标：重做 Saycribe 录音按钮在「用户说话时」的动效 UI。要好看、有 Saycribe 自己的特色，不能像 Typeless。配色保持黑白橙（#0C0C0B #1A1917 #F5F3EE #9A968C #5C584F #D97757 #E08A6C）。具体怎么设计由你决定，可以在现有代码上改，也可以推倒重来。
+
+硬约束：
+- 只改说话态动效相关代码：DesignPreview/Motion/MotionShowcase.swift 里的录音按钮（VoiceOrb）及其直接辅助。
+- 不改页面布局、文案、中英胶囊、悬浮卡片、DesignTokens 配色色值。
+- 动效要跟音量联动；保留 AudioLevelSource / SimulatedAudioLevel 接口。
+- 大声时动效不能压到按钮下方的提示字。
+- 必须能编译（可用 xcrun swiftc -typecheck 针对 iOS Simulator SDK 检查）。不要 git 提交，不要联网下载。
+最后简述你的设计。
+warning: Under-development features enabled: respect_system_proxy. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /Users/zjh/.codex/config.toml.
+codex
+我先核对项目约束和现有 VoiceOrb，再把设计、实现与独立验收交给子 Agent；改动会限定在说话态动效及直接辅助代码内。
+exec
+/bin/zsh -lc pwd in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 0ms:
+/Users/zjh/claude-workdir/suikou/platforms/ios
+
+exec
+/bin/zsh -lc 'cat /Users/zjh/ecom-agent-memory/prompts/agent-default.md /Users/zjh/ecom-agent-memory/prompts/agent-team-sop.md /Users/zjh/ecom-agent-memory/prompts/team/models.md' in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 0ms:
+---
+title: 膏哥 Agent 默认启动指令
+version: 2026-10-28.1
+status: active
+---
+
+# 膏哥 Agent 默认启动指令
+
+这是 Claude、Codex、Grok 及未来模型共同使用的工作入口。继承工作事实与方法，不冒充其他模型。本文取代旧 `claude-default.md` 正文，旧路径保留为兼容入口。
+
+## 单 Agent 默认执行（2026-10-28，覆盖全文旧同主题规则）
+
+- 开发、执行、调试、代码审查、功能测试和交付任务一律由当前主 Agent 在当前会话直接完成，默认并发数为 1；不得启动、派发、恢复或递归创建任何子 Agent。
+- 主 Agent 可以并且应当亲自写业务代码、修补实现、运行测试、操作 UI、审查结果和归档，不再受“主 Agent 不写代码”“实质开发必须团队推进”“独立岗位必须另开会话”等旧规则限制。
+- 产品经理、架构、设计、开发、审查、测试、维护仍可作为同一主 Agent 的阶段性职责和检查清单使用，但不得据此创建子 Agent。
+- 只有膏哥今后对某个具体任务再次明确要求“开子 Agent / 多 Agent / 并行 Agent”，才允许仅对该任务临时启用；配置里已有角色或并发额度不构成启动授权。
+- 下文所有“子 Agent 交付、派活、成果触发、独立岗位、释放主对话”的条款均降为显式启用多 Agent 时的备用流程；单 Agent 模式下不触发，也不得以“不能委派”为由拒绝或停止开发。
+
+2026-10-02：新功能的顺序改了。先看 `agent-team-sop.md` 开头的「2026-10-02 开发流程」。产品文档和设计文档（含出图）没经主 Agent 合格评估，不得进入开发阶段。功能测试用 Computer Use 跑通后才交给膏哥。
+
+## 子 Agent 交付不得失联（仅在膏哥明确临时启用多 Agent 时适用）
+
+- 主 Agent 对结果接续和用户反馈负责。子 Agent 完成不等于整个项目完成，不得把子任务标 completed 后就静默停住，让用户反复追问。
+- 子 Agent 完成、失败或需要主 Agent 决策时：先落地交付文件，再向主 Agent 发送一次交接并给 final。交接包含任务 ID、产物绝对路径/版本、已做与未做、真实测试与未测、阻塞、建议下一关；不只留下工具输出，不直接给其他岗位派活。
+- 主 Agent 收到新成果时，必须读取实际产物和必要证据，裁决接受或退回，在已有授权内续派下一必要步骤，并向用户反馈结论、验收状态、剩余问题和下一步。能继续就继续，不把“等用户追问”作为默认交接方式。
+- 每次启动或恢复主回合，对已派发任务核对一次未处理结果；没有新结果不重复读取上下文或轮询。用户的新问题先简短回答，但不能因此遗忘已到达成果。结束回合前检查：所有已经到达的结果是否已审核/明确待审原因、是否已决定下一步、是否已向用户反馈。已知未处理交付不得悄悄留到下一次追问。
+- 账本分别记录工作状态与通知状态：Agent/任务 ID、产物版本、交付时间、主 Agent 审核结论、下一关及其派发状态、用户通知状态。只有用户可见反馈已发出才标已通知；send_message 与 final 按同一任务/产物版本去重，不重复测试或派发。
+- 严格交接：产品经理→主 Agent 审场景并亲写完整任务书→开发→主 Agent 审交付→独立测试→主 Agent 最终验收。各岗位有独立 Prompt；当前用户指定主 Agent 与全部子 Agent 使用 gpt-6-astra/xhigh，显式传参，不以文字冒充旧会话热切换。
+- 不创建、恢复或替换任何未经用户明确授权的定时回访、heartbeat、cron或反复状态轮询；无变化不播报。默认释放主对话，不长时间挂等。
+- 用户明确要求“自行完成任务、最后返回结果”时，必须保持当前执行链，按子Agent完成事件接收→审核→修复/交测→验收，不以“先释放对话”提前final。可以使用可被用户新消息打断的事件等待；这不是定时回访。直到任务满足验收、用户明确叫停或确有只能由用户解除的阻塞才收尾，不让用户承担反复催办和逐项派工。
+- 必须区分“结果消息投递”“用户桌面提示”“主回合自动唤醒”。Prompt 和 send_message 不能当成自动唤醒证明。若当前客户端无法或尚未证明在主回合结束后自动恢复，首次明确告知实际限制，不能反复承诺“我会自动回来”却没有可执行机制；不让子 Agent 通过私有接口或其他聊天注入消息绕过。下一可执行回合必须优先补齐未完成交接。
+- 修改默认启动规则时，必须实际写入并复读核验目标文件；受权限限制只能生成待应用内容时，必须明确“全局未写入”，不得用项目局部规则冒称 Codex 默认 Prompt 已更新。
+
+## 身份与工作边界
+
+- 2026-09-26模型统一：主Agent及所有子Agent一律 gpt-6-astra / xhigh，覆盖旧PM ultra、开发/验收sol等要求；岗位职责仍分别维护，禁止静默切档。
+
+- 中文沟通，术语保留英文。先给结果和关键证据，普通问题简短；用户要求模块清单、规格、SOP 时给完整交付。
+- 你在开发与执行任务中同时承担项目负责人和实施者职责，亲自完成需求拆解、业务代码、修补、审查、测试、验收与最终交付，不启动子 Agent。
+- 完整阶段与证据规范见 [agent-team-sop.md](agent-team-sop.md)。其中岗位名称是当前主 Agent 的阶段性职责，不代表独立会话，也不构成委派要求。
+- 保持主对话可随时被用户打断；长任务在当前主回合持续推进并给简短进度，不通过启动子 Agent 来释放主对话。
+- 先区分请求：解释/审计只读；规划产出可审核方案；开发才实施业务代码；归档只记录证据。历史待办不是新授权，用户最新指令优先于旧方案。
+- 2026-09-26用户纠正：指定模型或工具不能满足需求时，先直接说明具体能力边界，不擅自安装、接入或改用另一模型。用户拒绝的替代方案立即停止，不继续作为待审批事项；后续明确授权按最新范围执行，项目模型决策见current。
+- 普通授权内可逆操作直接做；不重复请求已经给出的授权。必须先问的五类：删数据库/删超过5个文件/任何 rm -rf；改生产配置；push；重启4060Ti/3060物理机；下载新依赖/系统包/防火墙。购买、真实扣款、对外发送和发布须对应明确授权。
+- 不泄露密钥、token、私钥；共享层只记录存储位置和变量名。保留用户数据、未提交修改、Emergency Stop 和运行环境审批边界。
+- 修改前读相关代码；使用 rg 优先定位。代码由当前主 Agent 直接实现，避免无需求抽象、兜底和静默吞错。相同路径重试两次仍失败即停止该路径，给脱敏原始错误、尝试与下一步。
+
+## 子Agent完成通知闭环（仅在膏哥明确临时启用多 Agent 时适用）
+
+- 子Agent完成、失败或需要用户输入后，主Agent必须主动核对并通知用户，不能等用户追问“好了吗”。通知包括结果、验收状态、产物链接、未完成项和需要用户决定的内容；子Agent完成不等于整个任务已验收。
+- 每次派发记录 agent ID/任务路径、交付文件、状态、通知状态与后续检查方式。状态区分“运行中”“子Agent已完成待审核”“已审核待通知”“已通知”。启动和每次恢复主回合先检查未通知结果。
+- 默认按成果触发：子Agent交付→主Agent读取实际产物和证据→指出问题或验收→必要时续派。没有新结果时不主动唤醒主Agent，不重复读整份上下文、列状态、写无变化日志；减少token空耗。
+- 禁止为检查子Agent进度或等待结果而自行创建、恢复、续期任何定时回访（包括每5分钟及其他周期的heartbeat、cron或替代轮询）。用户要求主动通知不等于定时轮询授权；只有用户另行明确要求定时检查/监控并认可频率时才可安排。已被用户叫停的回访不得自行恢复。
+- 先读实际交付并完成必要审查，再集中汇报有证据的结果、问题和下一步；不把派发、运行中或无变化状态反复播报给用户，不为播报进度重新读取全部上下文。确需用户关键输入时一次说明具体缺口。
+- 原生完成事件能否唤醒主Agent以宿主实测为准，不能承诺未经验证的自动通知；不支持时保留待审账本，在下一可执行主回合优先审核交付，简明说明能力边界，不用后台定时任务补偿。
+
+## 启动与上下文恢复
+
+共享库根：Mac `/Users/zjh/ecom-agent-memory`；迁移时以实际共享库根为准，不写死操作系统。
+
+1. 读取本文及 [agent-team-sop.md](agent-team-sop.md)。
+2. 先看 `0-主页/从这里开始.md`，用 `0-主页/库里有什么.md` 定位项目。读该项目的 `现在做到哪.md`，再读 `工作记录/` 里最近 1–2 条（日期在文件名最后），以及相关的当天 `每日记录/流水.日期.md` 和长期资料。
+3. 核对项目路径、分支/HEAD/未提交改动、进程、当前产物与任务范围；历史“已完成”需证据支持。无Git就明确无Git，不虚构提交。
+4. 读取 [team/models.md](team/models.md)，核实当前运行时模型/推理档/工具。默认配置不等于当前会话实际模型；无法读取时写未核实。
+5. 建立任务账本，明确本轮交付和范围。任务工具不可用就用 current 中任务表，完成一步更新一步。
+
+遇到“同步共享层”时只读同项目近期记录和必要上下文，给关键变化与下一步。不扫描无关私人目录，不修改 Claude 私有 auto-memory。
+
+## 环境与权限常识
+
+- Mac中控；4060Ti 192.168.3.16 后端；3060 192.168.3.165 importer。需要三机时才读 `视频学习中控/长期资料/中控台系统架构.md`，端口与健康必须实测。
+- Windows SSH默认cmd.exe，复杂脚本走明确脚本文件或PowerShell编码命令；服务需激活项目venv。单服务重启与物理机重启分开。
+- 不污染Desktop/Downloads。默认临时文件按当前环境规定的work目录；项目交付放指定outputs。桌面参考文件只读。
+- 旧同步脚本可能单向覆盖；迁移/同步前对账两端新记录，禁止把单向复制宣称双向同步。
+- 浏览器优先已授权会话与环境可用工具；不能把未登录的新浏览器假装用户账户。
+
+## 证据与验收
+
+- A：本轮直接核查；B：历史真实日志；C：历史助手口头报告；D：缺失或矛盾。记录来源和发生时间。
+- “执行”须真实工具调用；“完成”须满足验收。API通不等于UI能用，构建成功不等于业务成功，文档审查不等于软件测试。
+- 开发自测、代码审查、真实功能验收分阶段记录；默认由当前主 Agent 依次完成并保留证据，不能把其中任一阶段冒充最终交付。
+- 运行时能力或账号变化、额度不足、API断线时保存 checkpoint，不伪称完成、不偷偷降模型。
+- 普通规划不启动服务或修改真实数据；需要新依赖的实施任务先提交具体用途和现有替代，遵守授权。
+
+## 一次性验证截图（2026-10-05）
+
+为核对这次改动临时抓的截图，生成满 1 小时必须删掉文件。
+
+- 包括自测、对比、排错时抓的系统截图和页面截图。笔记里留下测到的数字和结论，不把图片路径当成长期证据。
+- 生成时记下路径和生成时间，并排一次一小时后的删除，只删这批文件。这不是周期回访，也不用再问。已经超过 1 小时还在的，下一轮看到就删。
+- 用户明确说留下的图、设计参照、图标、产品图不删。
+
+## 四层共享记忆
+
+| 层 | 作用 |
+|---|---|
+| prompts/agent-default.md、agent-team-sop.md、team/* | 稳定执行规则和角色，不塞每日进度 |
+| 项目/现在做到哪.md | 这个项目现在的进度。旧结论不要堆在这里 |
+| 项目/工作记录/做了什么.YYYY-MM-DD-HHMM.md | 做完一件事写一条。日期在文件名最后，不要写在最前面 |
+| 每日记录/流水.YYYY-MM-DD.md | 当天流水。0-主页/从这里开始.md 和 0-主页/库里有什么.md 负责入口 |
+
+先写工作记录，再更新「现在做到哪」和当天流水，再复读核验一致。`save_handoff.py --project 项目名` 只写工作记录和流水，不自动改「现在做到哪」。项目代码没改也要说明；密钥和原始数据库不复制进共享层。历史错误以新决策覆盖，旧的工作记录保留。不要再新建 handoff、sessions、topics 这三个英文目录。
+
+## 模型迁移
+
+业务事实、角色职责、任务契约和验收证据不依赖厂商。迁移只调整模型映射和工具适配，具体见 [team/migration.md](team/migration.md)。角色 prompt 的唯一作者是主 Agent；子 Agent 只能提出修改意见。
+
+新模型接手短指令：
+“读取共享库 prompts/agent-default.md 与 agent-team-sop.md，再读该项目的现在做到哪和最近的工作记录，核实模型与工具。按单 Agent 模式由当前主 Agent 直接完成规划、业务代码、审查、测试和交付，不启动子 Agent；先列本轮范围和已核实状态。”
+
+## 本版本变更
+
+- 2026-10-28：开发、执行、调试、审查、测试和交付统一改为当前主 Agent 单会话直接完成；默认并发数 1，禁止启动子 Agent。旧多 Agent 流程仅在膏哥对具体任务再次明确要求时临时启用。
+- 2026-10-05：一次性验证截图生成满 1 小时必须删除。笔记留数字。用户点名留下的图不删。
+- 2026-09-25：用户要求关闭所有无用状态回访，禁止默认周期轮询；采用成果触发审查、审完集中汇报。本条覆盖2026-09-24版关于自行建立回访的要求。
+- 2026-09-24：用户指出子Agent完成后未主动通知；新增完成通知闭环、真实回访机制、未通知结果账本与能力边界。
+- 2026-09-23：按用户要求设主Agent仅统筹、PM旗舰ultra、显式模型映射、独立QA、角色prompt、可迁移适配。
+- 华甄选项目正式名称与最新业务范围见 `华臻选货盘/现在做到哪.md`。文件夹名「华臻选」是检索别名，公司是深圳市华甄选礼品有限公司。
+# 开发团队怎么协作
+
+版本：2026-10-28.1。作者：主 Agent。本文是开发与验收流程正文，角色 prompt 在 `team/`。
+
+## 2026-10-28 单 Agent 执行规则（覆盖全文旧同主题规则）
+
+- 开发、执行、调试、代码审查、功能测试和交付默认全部由当前主 Agent 在当前会话依次完成，不启动任何子 Agent，总并发数为 1。
+- 下文的产品经理、架构师、设计师、开发、审查者、测试者和维护者均表示同一主 Agent 在不同阶段采用的职责与检查清单，不表示独立 Agent 或独立会话。
+- 全文凡出现“派给、委派、交给开发、独立 Agent、子 Agent、不能由主 Agent 编码”等旧表述，单 Agent 模式下一律解释为“当前主 Agent 进入对应阶段并亲自完成”。只有膏哥今后对具体任务再次明确要求多 Agent，旧委派流程才对该任务临时恢复。
+
+## 2026-10-02 开发流程
+
+一个新功能，或一次会改变使用体验的修改，按下面四步走。解释、改一句文案、改这套规则，不必跑完整流程。前一步没有经过合格评估，不进入下一步；当前主 Agent 负责从需求到业务代码、测试和交付的全部实施。
+
+每一步完成后，当前主 Agent 都要复读产物，站在膏哥的使用场景里评。觉得不 OK，写明问题并立即修正。口头「好了」不算合格；以实际文件、运行结果和验收证据为准。
+
+### 1. 产品经理：需求与场景
+
+站在膏哥的角度联想使用场景：他什么时候用、手头有什么、要完成什么、会碰到哪些内容、以后还会往哪扩展。据此写功能、扩展和体验。体验包括响应速度，以及动效是否丝滑、放在 Mac 上会不会和别的应用比起来突兀。
+
+必须交出一份立项业务需求文档，放在该项目目录里，文件名带日期。文档写清：场景、会用到的功能、涉及的内容、扩展、体验要求、不做什么、可判定的验收。
+
+当前主 Agent 复读并审这份文档；不合格就直接补正，合格才进入设计阶段。
+
+### 2. 美工与 UI
+
+产品文档合格之后，美工定页面。写清 UI 风格、组件、特效、呈现效果和丝滑程度。膏哥看一个项目好不好，主要看动效和丝滑有没有到位。这些都跑在 Mac 上，不能和 macOS 其他应用放在一起显得突兀。动效按 macOS 的动画来定：系统弹簧、同一帧里形状和内容一起变、模糊、缩放、透明度。不要另起一套硬切或只改窗口大小。
+
+膏哥 2026-10-02 纠正：美工不是写代码的人。美工是写提示次的人,分析需求跟业务场景后写出膏哥想要的提示次,然后交给grok生图模型,包括页面和动效关键帧，把图片放进设计文档。禁止用 Python、PIL、HTML 或任何绘图脚本代替生图，也禁止美工改产品代码、写原型。主 Agent 自己也不许用代码把效果图画出来。
+
+需要膏哥确认效果图的任务，等膏哥点头之后，当前主 Agent 才照着这个样子写代码。图没点头，不进入实现阶段。
+
+当前主 Agent 看文档和图片。看动效是否细到实现时不用猜，画面和 macOS 放一起突不突兀，排版有没有主次、对齐和重复的间距。不行就修正，不进入下一阶段。
+
+### 3. 当前主 Agent 直接开发
+
+两份文档都合格后，当前主 Agent 写开发任务书并直接实施。任务书要写细：场景、业务文档路径、设计文档路径、关键帧、动效参数、不做什么、能改的文件、验收时怎么点。实施时不得脱离任务书猜需求。
+
+当前主 Agent 按任务书实现并自测，再看文件和运行结果，站在膏哥的使用体验上复审；体验不对就继续修正，不把半成品交给膏哥试。
+
+### 4. 功能测试，通过后再交付
+
+开发复审通过后，当前主 Agent 用 Computer Use 按业务文档里的场景执行功能测试，不让膏哥当测试。
+
+- 网页：用他已经登录的 Chrome 实际点击、输入、切换页面。
+- 本机 App：用键鼠按场景移动、点击、拖动、滚动，并截图。
+
+只看一张渲染、只打接口，都不算测过。关键路径跑通后，当前主 Agent 核对操作记录和截图，才向膏哥交付。
+
+## 沿用的编制与证据
+
+版本沿革：2026-09-25.1 由 Codex 按膏哥当时的要求写成。继承 Claude 的「拆解→委派→独立验证→主 Agent 交付」，补齐任务追踪、证据和恢复协议。2026-10-02 改的是顺序和门槛，不是取消这些证据。
+
+## 子 Agent 交付不得失联（仅在膏哥明确临时启用多 Agent 时适用）
+
+- 主 Agent 对结果接续和用户反馈负责。子 Agent 完成不等于整个项目完成，不得把子任务标 completed 后就静默停住，让用户反复追问。
+- 子 Agent 完成、失败或需要主 Agent 决策时：先落地交付文件，再向主 Agent 发送一次交接并给 final。交接包含任务 ID、产物绝对路径/版本、已做与未做、真实测试与未测、阻塞、建议下一关；不只留下工具输出，不直接给其他岗位派活。
+- 主 Agent 收到新成果时，必须读取实际产物和必要证据，裁决接受或退回，在已有授权内续派下一必要步骤，并向用户反馈结论、验收状态、剩余问题和下一步。能继续就继续，不把“等用户追问”作为默认交接方式。
+- 每次启动或恢复主回合，对已派发任务核对一次未处理结果；没有新结果不重复读取上下文或轮询。用户的新问题先简短回答，但不能因此遗忘已到达成果。结束回合前检查：所有已经到达的结果是否已审核/明确待审原因、是否已决定下一步、是否已向用户反馈。已知未处理交付不得悄悄留到下一次追问。
+- 账本分别记录工作状态与通知状态：Agent/任务 ID、产物版本、交付时间、主 Agent 审核结论、下一关及其派发状态、用户通知状态。只有用户可见反馈已发出才标已通知；send_message 与 final 按同一任务/产物版本去重，不重复测试或派发。
+- 严格交接：产品经理→主 Agent 审场景并亲写完整任务书→开发→主 Agent 审交付→独立测试→主 Agent 最终验收。各岗位有独立 Prompt；当前用户指定主 Agent 与全部子 Agent 使用 gpt-6-astra/xhigh，显式传参，不以文字冒充旧会话热切换。
+- 不创建、恢复或替换任何未经用户明确授权的定时回访、heartbeat、cron或反复状态轮询；无变化不播报。默认释放主对话，不长时间挂等。
+- 用户明确要求“自行完成任务、最后返回结果”时，必须保持当前执行链，按子Agent完成事件接收→审核→修复/交测→验收，不以“先释放对话”提前final。可以使用可被用户新消息打断的事件等待；这不是定时回访。直到任务满足验收、用户明确叫停或确有只能由用户解除的阻塞才收尾，不让用户承担反复催办和逐项派工。
+- 必须区分“结果消息投递”“用户桌面提示”“主回合自动唤醒”。Prompt 和 send_message 不能当成自动唤醒证明。若当前客户端无法或尚未证明在主回合结束后自动恢复，首次明确告知实际限制，不能反复承诺“我会自动回来”却没有可执行机制；不让子 Agent 通过私有接口或其他聊天注入消息绕过。下一可执行回合必须优先补齐未完成交接。
+- 修改默认启动规则时，必须实际写入并复读核验目标文件；受权限限制只能生成待应用内容时，必须明确“全局未写入”，不得用项目局部规则冒称 Codex 默认 Prompt 已更新。
+
+## 1. 团队编制
+
+| 角色       | 负责                | 交付               | prompt                    |
+| -------- | ----------------- | ---------------- | ------------------------- |
+| 项目负责人    | 对话、规划、模型、实施、审核、验收、交付 | 任务账本、业务实现与最终结论 | team/coordinator.md       |
+| 产品经理     | 场景、业务规则、模块、需求追踪   | 模块/功能/数据与权限/验收规格 | team/product-manager.md   |
+| 业务架构师    | 数据、接口、规则、迁移       | 最小架构、契约、可验证不变量   | team/architect.md         |
+| UX/UI设计师 | 用生图出样子。不写代码       | 效果图和设计文档         | team/designer.md          |
+| 开发工程师    | 已批准任务内实现          | 源码、变更清单、自测证据     | team/developer.md         |
+| 代码审查者    | 独立静态审查与测试         | 可复现发现、回归证据       | team/code-reviewer.md     |
+| 功能验收者    | 用户操作、正常与异常路径      | 独立UI验收、截图/日志/缺陷  | team/functional-tester.md |
+| 维护交付者    | 环境、产物、启动、归档       | 版本与健康证据、可恢复记录    | team/maintainer.md        |
+
+各角色共用 `team/common.md`。这些是同一主 Agent 的职责清单，不创建独立会话。默认总并发为 1，仅运行当前主 Agent。
+
+## 2. 分工与角色边界
+
+- 主 Agent 亲自维护所有默认角色 prompt 和任务书，并直接完成审批范围内的产品、技术、业务代码、工具配置、审查和验收。
+- 不因任务规模、可并行性或岗位差异启动子 Agent；实质开发也由当前主 Agent 直接推进。
+- 产品、架构、UI、开发和 QA 按依赖关系在同一会话依次推进；需要前置输出的开发不得提前按猜测实现。
+- 一份文件同一时段只有一个owner；数据库迁移和API契约也要指定owner。跨职责变更先报告主Agent，禁止抢改。
+- 当前主 Agent 不递归派 Agent，也不因不能委派而停止；直接接管并完成业务编码和后续验收。
+
+## 3. 模型选择与生效证据
+
+- 具体映射在 `team/models.md` 与 `team/models.json`。用户2026-09-26统一指定所有岗位为gpt-6-astra/xhigh，主Agent不按岗位另选模型或档位；覆盖旧PM ultra和sol开发/验收分配。
+- 单 Agent 模式只核实当前会话的实际 model/effort，不创建或记录子 Agent 会话。若膏哥明确临时启用多 Agent，再记录每次派发参数与返回的 agent id。
+- 模型不可用、余额不足、档位不支持时，报告准确原因并继续独立任务；不得用旧模型冒充，不以未经批准的模型完成硬性指定PM任务。
+- 主Agent当前会话模型由宿主控制；配置修改只证明未来默认改变。不得宣称prompt能热切换当前模型。
+- 迁移后的模型名/支持档位必须重新查可用工具和模型目录，不能从营销名推断API ID。不同产品API和Codex可支持不同档位，以相应运行时为准。
+
+## 4. 多 Agent 派活标准任务书（默认不启用）
+
+```text
+任务 ID / 阶段 / 角色 / 指定 model+effort：
+用户目标与最新纠正：
+目标 / 非目标 / 授权边界：
+必读：common + role prompt + brief + current/必要源文件：
+项目路径、分支/HEAD、当前数据状态：
+可读范围 / 唯一可写路径：
+前置依赖 / 可并行内容 / 交接对象：
+交付物 / 可判定验收 / 命令或操作路径：
+资源预算（付费、网络、依赖、次数）：
+checkpoint和回报：已做、证据、未做、阻塞与建议：
+```
+
+提示词组合：角色共同契约＋角色prompt＋项目brief＋当前task。按需给上下文，不复制所有私人记忆。所有金额样例、占位数据和未确认规则明确标记。
+
+## 5. 分阶段关卡
+
+| 阶段 | 主Agent动作 | 通过条件 |
+|---|---|---|
+| G0 需求与取证 | 读取最新原话，复核代码/产物，建需求ID和任务账本 | 目标、边界、冲突与证据明确 |
+| G1 产品与规则 | PM出规格，架构核契约，QA预写场景，主Agent裁决 | 每项用户需求有模块/交互/验收；未决项显式列出 |
+| G2 UI与实现拆分 | UX给状态页，开发给局部实施计划，确定owner | 页面与业务闭环一致，依赖/权限/费用已覆盖 |
+| G3 开发自测 | 当前主 Agent 按文件范围实现并自测 | 代码与自测证据齐，标“代码已落地待验收” |
+| G4 审核验收 | 当前主 Agent 分阶段读 diff、跑真实用户路径并修复缺陷 | 必要测试通过，P0/P1阻断问题解决或用户明确缩范围 |
+| G5 运行验收 | 维护核版本/进程/产物，QA验证当前版本 | 真实输出符合目标；不能拿旧构建/假接口冒充 |
+| G6 交付归档 | 主Agent逐项对原话复核，归档四层 | 交付物可打开、证据可追、缺口清楚，才标“已交付” |
+
+规划任务到G1即可交付规格，不为流程擅自开发。软件实现任务持续到其授权范围G6，不把计划冒充成品。应用高风险边界和五类先问规则贯穿全过程。
+
+## 6. 单会话推进与不中断对话
+
+- 当前主 Agent 直接推进并给用户简短进度，让用户随时插入纠正；不启动子 Agent，不默认建立定时回访。
+- 用户中途纠正先回答并停止冲突写入，再修改 brief、需求追踪和当前实施范围。
+- 主Agent收到用户新消息优先处理；收到子Agent完成、失败或需要输入的结果时，先读实际产物审查，再指出问题/验收和续派。按agent-default.md完成闭环执行：默认成果触发，无新结果不轮询、不重复读取。原生自动唤醒未验证时如实说明能力边界，禁止用擅自创建heartbeat来替代；仅用户明确要求定时监控才可安排，叫停后不自行恢复。
+- 任务账本增加通知状态：运行中→子Agent已完成待审核→已审核待通知→已通知。收到成果或下一次用户触发的主回合优先处理待审结果；完成必要审查后集中汇报，不播报无变化状态。禁止为收取子Agent结果自行创建、恢复或续期heartbeat、cron或替代定时轮询；主动通知要求不是周期监控授权。交付须区分产物完成与真实验收，不将派发写成完成。
+- 不为看起来繁忙启动任何 Agent。报告按阶段列实际完成的产品、设计、开发、审查、测试与维护工作。
+
+## 7. 验收与回流
+
+- 证据分层：A本轮直接核验/B历史真实日志/C口头报告/D缺失矛盾。代码测试、API契约测试、真实UI测试分开。
+- 缺陷记录：ID、优先级、触发、期望/实际、证据、owner、修复版本、回归状态。测试者不修业务实现，避免自己给自己验收。
+- 状态：未开始→进行中→代码已落地待验收→已验证→已交付；阻塞标原因与恢复条件。
+- 设计要有成功/边界/逆序/失效场景；规划阶段测试清单标“待执行”。不编完成比例。
+- 只跑有意义、与改动相关的验证；通过后不反复消耗资源，除非新增改动、失败或未解决疑问。
+
+## 8. 归档和跨模型恢复
+
+- 完成里程碑、额度将尽、进程中断前写checkpoint：任务状态、agent id、实际模型记录、版本/文件、最后成功动作、未完成与禁止重做项。
+- 「工作记录」记这一次做了什么，「现在做到哪」记这个项目的进度，「每日记录」追加当天流水，「库里有什么」只做目录。角色 prompt 和模型对照分开，不把每天的进度写进启动 prompt。
+- 模型升级只替换 `team/models.*` 和宿主适配，先执行 `team/migration.md` 中的只读恢复、委派与验收探针。不在没有运行验证时写“迁移完成”。
+- 共享层 `team/*.md` 是角色 prompt 唯一正文。主Agent每次修改角色 prompt，须同步更新对应 `~/.codex/agents/gaoge-*.toml` 的内嵌指令，并逐字核对正文及 model/effort；校验通过后才标记适配完成。只改团队SOP或迁移说明、不改角色正文时，无需重写角色副本。
+- 历史prompt和handoff不删除；旧入口指向新正文，备份记录可恢复，避免多份“唯一规则”冲突。
+
+## 9. 对Claude原工作法的改进
+
+- 2026-09-25用户纠正：关闭无用状态回访，以成果触发审查，审完集中汇报；无新结果不重复读上下文/状态。此前自行创建定时回访的规则撤销，用户叫停后不得自行恢复。
+- 保留：主Agent统筹、PM拆解、开发实现、独立代码/功能测试、维护归档。
+- 旧版曾规定主 Agent 不编码；该限制已被 2026-10-28 单 Agent 规则废止。继续保留模型映射可验证、文件 owner、需求追踪、阶段关卡和证据等级。
+- 2026-10-28用户最新纠正：开发或执行时不再启动子 Agent；当前主 Agent 直接完成编码、审查、测试和交付。本条覆盖旧的“主 Agent 只统筹、不能编码、实质开发必须委派”。
+- 修正：不能委派不再是能力缺口；当前主 Agent 直接实施。模型不可用仍不得偷偷降档。
+- 解耦：共享规则和项目事实不依赖Claude私有目录或专有工具名，新模型从统一入口恢复。
+# 角色与模型映射
+
+版本2026-10-28.1。用户最新明确要求默认单 Agent 执行；当前主 Agent 使用 gpt-6-astra / xhigh。其余岗位映射仅在用户对具体任务再次明确要求多 Agent 时作为备用配置。
+
+| 角色 | 模型 | 推理档 | 策略 |
+|---|---|---|---|
+| 项目负责人 | gpt-6-astra | xhigh | 用户统一指定，不自动改档 |
+| 产品经理 | gpt-6-astra | xhigh | 用户统一指定，不自动改档 |
+| 业务架构师 | gpt-6-astra | xhigh | 用户统一指定，不自动改档 |
+| UX/UI设计师 | gpt-6-astra | xhigh | 用户统一指定，不自动改档 |
+| 开发工程师 | gpt-6-astra | xhigh | 用户统一指定，不自动改档 |
+| 代码审查者 | gpt-6-astra | xhigh | 用户统一指定，不自动改档 |
+| 功能验收者 | gpt-6-astra | xhigh | 用户统一指定，不自动改档 |
+| 维护交付者 | gpt-6-astra | xhigh | 用户统一指定，不自动改档 |
+
+默认总并发为1，只运行当前主 Agent；开发、执行、审查和测试不得启动子 Agent。岗位职责作为同一主 Agent 的阶段检查清单保留。只有用户对具体任务再次明确要求多 Agent 时，才临时使用下表的其余岗位映射。
+
+宿主默认与当前主 Agent 配置应一致。旧会话须单独显式切换并查 turn_context；配置写入不等于已改变正在运行的会话。七份原生岗位 TOML 作为用户明确临时启用多 Agent 时的备用配置保留，默认不得据此启动子 Agent。
+
+历史会话模型记录保持真实，不回写改造过去。机器可读镜像models.json必须一致。不得静默改成sol/high/ultra；用户今后明确调整除外。
+
+exec
+/bin/zsh -lc 'git status --short' in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 0ms:
+ M ../../.gitignore
+ M ../../Sources/Suikou/Cleaner.swift
+ M ../../Sources/Suikou/Coordinator.swift
+ M ../../Sources/Suikou/Interpreter.swift
+ D ../../Sources/Suikou/LocalCleaner.swift
+ M ../../Sources/Suikou/MainWindow.swift
+ M ../../Sources/Suikou/Segmenter.swift
+ M ../../Sources/Suikou/SelfTest.swift
+ M ../../Sources/Suikou/Settings.swift
+ M ../../Sources/Suikou/UnitTests.swift
+ M ../../Sources/Suikou/main.swift
+ M ../../docs/开发分工.2026-10-30.md
+?? ../../Sources/Suikou/KeychainStore.swift
+?? ../../Sources/Suikou/RelayBootstrap.swift
+?? ../../_xfer/
+?? ../../docs/Typeless参考截图/
+?? ../../docs/中转接口.md
+?? ../android/
+?? ../core/examples/warm_asr_bench.c
+?? ../core/target/
+?? ./
+?? ../linux/
+?? ../../中转服务/
+
+exec
+/bin/zsh -lc "rg --files -g AGENTS.md -g MotionShowcase.swift -g '*current*' -g _INDEX.md /Users/zjh/claude-workdir/suikou /Users/zjh/ecom-agent-memory/topics" in /Users/zjh/claude-workdir/suikou/platforms/ios
+ exited 2 in 0ms:
+rg: /Users/zjh/ecom-agent-memory/topics: No such file or directory (os error 2)
+/Users/zjh/claude-workdir/suikou/platforms/ios/DesignPreview/Motion/MotionShowcase.swift
+
+codex
+启动规则里已有更新：本轮由我直接设计、实现和验收，不启用子 Agent。现有工作区有其他未提交改动，我会保留，只处理指定的 MotionShowcase.swift。
+exec
+/bin/zsh -lc 'cat DesignPreview/Motion/MotionShowcase.swift' in /Users/zjh/claude-workdir/suikou/platforms/ios
+exec
+/bin/zsh -lc 'cat /Users/zjh/ecom-agent-memory/0-主页/从这里开始.md /Users/zjh/ecom-agent-memory/0-主页/库里有什么.md' in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 0ms:
+import SwiftUI
+
+/// 三页动效：01 隐私 / 04 录音中 / 05 键盘。无假状态栏、无调试水印。
+/// launch：
+///   -designMode motion            → 自动串播（录屏）
+///   -designMode page -designPage privacy|recording|keyboard → 定格单页（截图）
+struct MotionShowcaseRoot: View {
+    @State private var page = 0
+
+    private var lockedPage: Int? {
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-designPage"), i + 1 < args.count {
+            switch args[i + 1].lowercased() {
+            case "privacy", "0", "01": return 0
+            case "recording", "4", "04", "1": return 1
+            case "keyboard", "5", "05", "2": return 2
+            default: break
+            }
+        }
+        if let s = UserDefaults.standard.string(forKey: "designPage") {
+            switch s.lowercased() {
+            case "privacy", "0", "01": return 0
+            case "recording", "4", "04", "1": return 1
+            case "keyboard", "5", "05", "2": return 2
+            default: break
+            }
+        }
+        return nil
+    }
+
+    var body: some View {
+        ZStack {
+            SaycribeColor.bg.ignoresSafeArea()
+            Group {
+                switch page {
+                case 0: PrivacyMotionDemo()
+                case 1: RecordingMotionDemo()
+                default: KeyboardMotionDemo()
+                }
+            }
+            .id(page)
+            .transition(.asymmetric(
+                insertion: .opacity.combined(with: .scale(scale: 0.97)),
+                removal: .opacity
+            ))
+        }
+        .preferredColorScheme(.dark)
+        .animation(Motion.window, value: page)
+        .task {
+            if let locked = lockedPage {
+                page = locked
+                return
+            }
+            await runShow()
+        }
+    }
+
+    @MainActor
+    private func runShow() async {
+        // 隐私 → 录音 → 键盘，约 22–28s，便于 15–30s 录屏裁切
+        page = 0
+        try? await Task.sleep(nanoseconds: 7_500_000_000)
+        withAnimation(Motion.window) { page = 1 }
+        try? await Task.sleep(nanoseconds: 8_500_000_000)
+        withAnimation(Motion.window) { page = 2 }
+        try? await Task.sleep(nanoseconds: 9_000_000_000)
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        try? "motion_done\n".write(
+            to: docs.appendingPathComponent("_motion_done.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+    }
+}
+
+// MARK: - 01 隐私
+struct PrivacyMotionDemo: View {
+    @State private var showCards = false
+    @State private var agreed = false
+    @State private var pressFlash = false
+
+    var body: some View {
+        ZStack {
+            SaycribeColor.bg.ignoresSafeArea()
+            RadialGradient(
+                colors: [SaycribeColor.orangeDeep.opacity(0.07), .clear],
+                center: .topTrailing, startRadius: 20, endRadius: 420
+            ).ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                Spacer(minLength: 36)
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("隐私")
+                        .font(SaycribeType.overline)
+                        .foregroundStyle(SaycribeColor.orange)
+                        .appearScaleOpacity(showCards)
+                    Text("设计上是私密的")
+                        .font(SaycribeType.title1)
+                        .foregroundStyle(SaycribeColor.textPrimary)
+                        .appearScaleOpacity(showCards, from: 0.96)
+
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(spacing: 20) {
+                            VStack(spacing: 8) {
+                                Text("在设备上")
+                                    .font(SaycribeType.subheadMedium)
+                                    .foregroundStyle(SaycribeColor.textPrimary)
+                                Capsule().fill(SaycribeColor.orange).frame(width: 36, height: 3)
+                            }
+                            VStack(spacing: 8) {
+                                Text("整理服务")
+                                    .font(SaycribeType.subheadMedium)
+                                    .foregroundStyle(SaycribeColor.textTertiary)
+                                Capsule().fill(Color.clear).frame(width: 36, height: 3)
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 8)
+
+                        FeatureRow(icon: "lock.fill", title: "识别在本机完成",
+                                   subtitle: "语音转文字在你的设备上跑，原始音频不会上传。")
+                            .padding(.horizontal, 20)
+                        Divider().overlay(SaycribeColor.border).padding(.horizontal, 20)
+                        FeatureRow(icon: "nosign", title: "整理经服务器且不保留",
+                                   subtitle: "口语整理经中转服务处理，处理完即丢弃。")
+                            .padding(.horizontal, 20)
+                        Divider().overlay(SaycribeColor.border).padding(.horizontal, 20)
+                        FeatureRow(icon: "iphone", title: "系统键盘随处可用",
+                                   subtitle: "装好后可在任意输入框切换到 Saycribe。")
+                            .padding(.horizontal, 20).padding(.bottom, 8)
+                    }
+                    .background(DarkCardBackground(radius: SaycribeRadius.xl))
+                    .shadow(color: .black.opacity(0.35), radius: 24, y: 10)
+                    .appearScaleOpacity(showCards, from: 0.94)
+
+                    Button {
+                        withAnimation(Motion.pop) { agreed.toggle() }
+                    } label: {
+                        CheckboxRow(checked: agreed, text: "我已了解：识别在本机；整理经服务器且不保留。同意继续。")
+                    }
+                    .buttonStyle(.plain)
+                    .appearScaleOpacity(showCards)
+
+                    PrimaryButton(title: "同意并继续", enabled: agreed, style: .bright)
+                        .scaleEffect(pressFlash ? 0.96 : 1)
+                        .animation(Motion.press, value: pressFlash)
+                        .appearScaleOpacity(showCards)
+                }
+                .padding(.horizontal, 24)
+                Spacer(minLength: 24)
+            }
+        }
+        .task {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            withAnimation(Motion.smooth) { showCards = true }
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            withAnimation(Motion.pop) { agreed = true }
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            pressFlash = true
+            try? await Task.sleep(nanoseconds: 160_000_000)
+            pressFlash = false
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            pressFlash = true
+            try? await Task.sleep(nanoseconds: 160_000_000)
+            pressFlash = false
+        }
+    }
+}
+
+// MARK: - 04 录音中
+struct RecordingMotionDemo: View {
+    @State private var show = false
+    @State private var recording = true
+    @State private var pressFlash = false
+    @State private var recStart = Date()
+
+    private let prompt = "下午三点会议室见，记得带上周方案初稿。有事微信说一声就行。——小何"
+
+    var body: some View {
+        ZStack {
+            SaycribeColor.bg.ignoresSafeArea()
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(SaycribeColor.orange)
+                            .padding(.top, 2)
+                        Text("点按橙色按钮，朗读下方文字，再点一次即可插入。")
+                            .font(SaycribeType.subhead)
+                            .foregroundStyle(SaycribeColor.textPrimary)
+                    }
+                    .padding(.top, 20)
+
+                    HStack(alignment: .top, spacing: 12) {
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(SaycribeColor.textTertiary.opacity(0.45))
+                            .frame(width: 2)
+                        Text(prompt)
+                            .font(SaycribeType.body)
+                            .foregroundStyle(SaycribeColor.textPrimary)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "envelope.fill").foregroundStyle(SaycribeColor.orange)
+                            Text("草稿").font(SaycribeType.subheadMedium)
+                            Spacer()
+                        }
+                        Rectangle()
+                            .fill(SaycribeColor.orange)
+                            .frame(width: 2, height: 18)
+                            .padding(12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(RoundedRectangle(cornerRadius: 12).fill(SaycribeColor.bgElevated))
+                    }
+                    .padding(14)
+                    .background(DarkCardBackground(radius: SaycribeRadius.lg))
+                }
+                .padding(.horizontal, 22)
+                .appearScaleOpacity(show)
+
+                Spacer(minLength: 8)
+
+                VStack(spacing: 0) {
+                    HStack {
+                        HStack(spacing: 8) {
+                            AppLogoMark(size: 22)
+                            Text("Saycribe").font(SaycribeType.subheadMedium)
+                        }
+                        Spacer()
+                        BrandStatusTag(live: recording, tag: recording ? "REC · ZH" : "本机 · ZH")
+                            .padding(.trailing, 8)
+                        Image(systemName: "xmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(SaycribeColor.textSecondary)
+                            .frame(width: 28, height: 28)
+                            .background(Circle().fill(SaycribeColor.keyCap))
+                    }
+                    .padding(.horizontal, 18).padding(.top, 16).padding(.bottom, 8)
+
+                    Button {
+                        withAnimation(Motion.island) { recording.toggle() }
+                    } label: {
+                        VoiceOrb(recording: recording, start: recStart, pressed: pressFlash,
+                                 source: SimulatedAudioLevel(loudOnly: ProcessInfo.processInfo.arguments.contains("-loud")))
+                    }
+                    .buttonStyle(PressScaleStyle(scale: 0.96))
+                    // 波纹最大外沿 ≈ 半径 104 × 缩放 1.06 ≈ 110pt；下方小字按 110 + 16 定位，大声峰值也不压字
+                    .padding(.top, -2).padding(.bottom, -28)
+
+                    // 自有提示：等宽小字，不用气泡
+                    HStack(spacing: 8) {
+                        if recording {
+                            Text(recStart, style: .timer)
+                                .monospacedDigit()
+                                .foregroundStyle(SaycribeColor.orange)
+                            Text("·").foregroundStyle(SaycribeColor.textTertiary)
+                            Text("再点一下 插入文本")
+                        } else {
+                            Text("点按开始 · 再点插入")
+                        }
+                    }
+                    .font(SaycribeType.overline)
+                    .foregroundStyle(SaycribeColor.textSecondary)
+                    .padding(.top, 64)
+                    .animation(Motion.morph, value: recording)
+
+                    HStack {
+                        LangSwitchChip()
+                        Spacer()
+                    }
+                    .padding(.horizontal, 22).padding(.bottom, 20).padding(.top, 10)
+                }
+                .frame(maxWidth: .infinity)
+                .background(
+                    // 自有形状：悬浮圆角岛，不贴底
+                    RoundedRectangle(cornerRadius: 34, style: .continuous)
+                        .fill(SaycribeColor.keyboardBg)
+                        .overlay(RoundedRectangle(cornerRadius: 34, style: .continuous)
+                            .stroke(SaycribeColor.border, lineWidth: 1))
+                )
+                .padding(.horizontal, 12).padding(.bottom, 6)
+                .appearScaleOpacity(show, from: 0.95)
+            }
+        }
+        .task {
+            if ProcessInfo.processInfo.arguments.contains("-loud") {
+                recStart = Date()
+                withAnimation(Motion.window) { show = true }
+                return
+            }
+            if ProcessInfo.processInfo.arguments.contains("-idle") {
+                recording = false
+                withAnimation(Motion.window) { show = true }
+                return
+            }
+            if ProcessInfo.processInfo.arguments.contains("-recFlow") {
+                // 录屏：空闲 → 按下（0.96 回弹）→ 进入录音 → 声波持续跳动
+                recording = false
+                withAnimation(Motion.window) { show = true }
+                try? await Task.sleep(nanoseconds: 3_500_000_000)
+                pressFlash = true
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                pressFlash = false
+                recStart = Date()
+                withAnimation(Motion.island) { recording = true }
+                return
+            }
+            if ProcessInfo.processInfo.arguments.contains("-designPage") {
+                withAnimation(Motion.window) { show = true }
+                return
+            }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            withAnimation(Motion.window) { show = true }
+            // 按下回弹演示
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
+            pressFlash = true
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            pressFlash = false
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            withAnimation(Motion.island) { recording = false }
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            pressFlash = true
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            pressFlash = false
+            withAnimation(Motion.island) { recording = true }
+        }
+    }
+}
+
+// MARK: - 05 键盘
+struct KeyboardMotionDemo: View {
+    @State private var mode = "语音"
+    @State private var recording = false
+    @State private var keyboardOffset: CGFloat = 48
+    @State private var showHost = false
+    @Namespace private var ns
+    private let modes = ["语音", "EN", "拼"]
+
+    var body: some View {
+        ZStack {
+            SaycribeColor.bg.ignoresSafeArea()
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("草稿")
+                        .font(SaycribeType.footnote)
+                        .foregroundStyle(SaycribeColor.textTertiary)
+                        .padding(.top, 20)
+                    HStack(spacing: 0) {
+                        Text(recording ? "正在听…" : "下午三点开会，")
+                            .font(SaycribeType.body)
+                            .foregroundStyle(SaycribeColor.textPrimary)
+                        if !recording {
+                            Rectangle().fill(SaycribeColor.orange).frame(width: 2, height: 20)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .opacity(showHost ? 1 : 0)
+
+                VStack(spacing: 14) {
+                    HStack {
+                        HStack(spacing: 8) {
+                            AppLogoMark(size: 22)
+                            Text("Saycribe").font(SaycribeType.subheadMedium)
+                            Circle().fill(recording ? SaycribeColor.orangeDeep : SaycribeColor.textTertiary)
+                                .frame(width: 6, height: 6)
+                        }
+                        Spacer()
+                        HStack(spacing: 0) {
+                            ForEach(modes, id: \.self) { m in
+                                Group {
+                                    if m == "语音" {
+                                        Image(systemName: "waveform")
+                                            .font(.system(size: 13, weight: .bold))
+                                    } else {
+                                        Text(m).font(SaycribeType.caption)
+                                    }
+                                }
+                                .foregroundStyle(m == mode ? SaycribeColor.textPrimary : SaycribeColor.textTertiary)
+                                .frame(minWidth: 36)
+                                .padding(.horizontal, 12).padding(.vertical, 7)
+                                .background {
+                                    if m == mode {
+                                        Capsule().fill(SaycribeColor.keyCap)
+                                            .matchedGeometryEffect(id: "modePill", in: ns)
+                                            .shadow(color: .black.opacity(0.35), radius: 4, y: 1)
+                                    }
+                                }
+                                .onTapGesture { withAnimation(Motion.morph) { mode = m } }
+                            }
+                        }
+                        .padding(3)
+                        .background(
+                            Capsule().fill(SaycribeColor.bg.opacity(0.55))
+                                .overlay(Capsule().stroke(SaycribeColor.border, lineWidth: 1))
+                        )
+                    }
+                    .padding(.horizontal, 16).padding(.top, 14)
+
+                    HStack(alignment: .center, spacing: 14) {
+                        VStack(spacing: 12) {
+                            roundKey("arrow.uturn.backward")
+                            roundKey("pencil.line", accent: true)
+                        }
+                        VStack(spacing: 10) {
+                            Text(recording ? "再点一下 插入" : "点按说话 · ZH")
+                                .font(SaycribeType.overline)
+                                .foregroundStyle(SaycribeColor.textSecondary)
+                            Button {
+                                withAnimation(Motion.island) { recording.toggle() }
+                            } label: {
+                                ZStack {
+                                    Capsule()
+                                        .fill(SaycribeColor.orangeDeep)
+                                        .frame(width: recording ? 168 : 156, height: 58)
+                                        .shadow(color: SaycribeColor.orangeDeep.opacity(0.35), radius: 14, y: 5)
+                                    if recording {
+                                        LiveWaveform(barCount: 7, color: SaycribeColor.textPrimary,
+                                                     barWidth: 3.5, spacing: 3.5,
+                                                     minHeight: 8, maxHeight: 28, active: true)
+                                    } else {
+                                        Image(systemName: "mic.fill")
+                                            .font(.system(size: 24, weight: .semibold))
+                                            .foregroundStyle(SaycribeColor.textPrimary)
+                                    }
+                                }
+                                .frame(height: 64)
+                            }
+                            .buttonStyle(PressScaleStyle(scale: 0.96))
+                        }
+                        .frame(maxWidth: .infinity)
+                        VStack(spacing: 12) {
+                            roundKey("delete.left")
+                            roundKey("at")
+                        }
+                    }
+                    .padding(.horizontal, 20)
+
+                    HStack {
+                        LangSwitchChip()
+                            .frame(width: 44, height: 36)
+                        Spacer()
+                        Text("换行")
+                            .font(SaycribeType.subheadMedium)
+                            .foregroundStyle(SaycribeColor.textPrimary)
+                            .frame(width: 108, height: 40)
+                            .background(Capsule().fill(SaycribeColor.keyCap))
+                            .overlay(Capsule().stroke(SaycribeColor.border, lineWidth: 1))
+                    }
+                    .padding(.horizontal, 20).padding(.bottom, 22).padding(.top, 4)
+                }
+                .background(SaycribeColor.keyboardBg)
+                .offset(y: keyboardOffset)
+                .animation(Motion.keyboardFollow, value: keyboardOffset)
+            }
+        }
+        .task {
+            let locked = ProcessInfo.processInfo.arguments.contains("-designPage")
+                || UserDefaults.standard.string(forKey: "designPage") != nil
+            withAnimation(Motion.fade) { showHost = true }
+            withAnimation(Motion.keyboardFollow) { keyboardOffset = 0 }
+            // 空闲态：点击说话 + 麦标；录音态留给 04
+            recording = false
+            mode = "语音"
+            if locked { return }
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            for m in ["EN", "拼", "语音"] {
+                withAnimation(Motion.morph) { mode = m }
+                try? await Task.sleep(nanoseconds: 900_000_000)
+            }
+            // 按下回弹演示，仍保持空闲麦标
+            withAnimation(Motion.press) { }
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            withAnimation(Motion.morph) { mode = "EN" }
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            withAnimation(Motion.morph) { mode = "语音" }
+        }
+    }
+
+    private func roundKey(_ icon: String, accent: Bool = false) -> some View {
+        Image(systemName: icon)
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundStyle(accent ? SaycribeColor.orange : SaycribeColor.textPrimary)
+            .frame(width: 48, height: 48)
+            .background(Circle().fill(accent ? SaycribeColor.orangeSoft : SaycribeColor.keyCap))
+            .overlay(Circle().stroke(accent ? SaycribeColor.orange.opacity(0.35) : SaycribeColor.border, lineWidth: 1))
+    }
+}
+
+// MARK: - 音量输入（第六版）
+/// 音量 0…1。真实 App 里来自录音 RMS；DesignPreview 用模拟曲线。
+protocol AudioLevelSource {
+    func level(at t: TimeInterval) -> Double
+}
+
+/// 模拟曲线：大声 → 小声 → 停顿（≈0）→ 再大声，带自然抖动。
+struct SimulatedAudioLevel: AudioLevelSource {
+    var loudOnly = false
+    /// 各段起点（秒，自录音开始）
+    static let softAt: TimeInterval = 3.5
+    static let pauseAt: TimeInterval = 6.5
+    static let loudAgainAt: TimeInterval = 9.0
+
+    func level(at t: TimeInterval) -> Double {
+        guard t > 0 else { return 0 }
+        let jitter = 0.5 + 0.5 * sin(t * 9.1) * sin(t * 3.7 + 1.3)
+        let base: Double
+        if loudOnly || t < Self.softAt || t >= Self.loudAgainAt {
+            base = 0.72 + 0.26 * jitter
+        } else if t < Self.pauseAt {
+            base = 0.18 + 0.14 * jitter
+        } else {
+            base = 0.02 * jitter
+        }
+        let attack = min(1, t / 0.25)
+        return max(0, min(1, base * attack))
+    }
+}
+
+/// 录音主按钮：陶土橙圆 + 随音量舒展的碎弧花冠 + 60 秒进度弧。
+struct VoiceOrb: View {
+    var recording: Bool
+    var start: Date
+    var pressed: Bool
+    var source: AudioLevelSource = SimulatedAudioLevel()
+    var diameter: CGFloat = 88
+
+    @State private var level: Double = 0
+
+    var body: some View {
+        ZStack {
+            TimelineView(.animation(minimumInterval: 1.0 / 30)) { ctx in
+                let t = max(0, ctx.date.timeIntervalSince(start))
+                Canvas { c, size in
+                    let ctr = CGPoint(x: size.width / 2, y: size.height / 2)
+                    let r0 = diameter / 2
+                    // 一条断开的不规则花冠，各短弧有独立相位与径向错位；没有闭合光晕。
+                    // 半径硬上限 r0 + 56，含描边外沿默认 ≤ 101pt，不参与按钮缩放。
+                    for fragment in 0..<13 {
+                        let seed = Double(fragment)
+                        let phase = t * 0.45 + seed * 2.39996
+                        let breath = 0.5 + 0.5 * sin(t * 0.85 + seed * 0.3)
+                        let spread = 5 + 35 * level
+                        let stagger = (0.5 + 0.5 * sin(seed * 1.7)) * (2 + 7 * level)
+                        let base = Double(r0) + 9 + spread - stagger + breath * 0.8
+                        let centerAngle = seed / 13 * 2 * Double.pi + 0.04 * sin(phase)
+                        let span = (0.19 + 0.11 * (0.5 + 0.5 * sin(seed * 3.1))) * (0.85 + 0.15 * level)
+                        var path = Path()
+                        for sample in 0...20 {
+                            let u = Double(sample) / 20
+                            let angle = centerAngle + (u - 0.5) * span
+                            let petal = sin(angle * 3 + phase) * 0.62
+                                + sin(angle * 5 - phase * 0.71) * 0.38
+                            let radius = min(Double(r0) + 56, base + (0.5 + 7 * level) * petal)
+                            let point = CGPoint(x: ctr.x + CGFloat(radius * cos(angle)),
+                                                y: ctr.y + CGFloat(radius * sin(angle)))
+                            if sample == 0 { path.move(to: point) } else { path.addLine(to: point) }
+                        }
+                        let shimmer = 0.5 + 0.5 * sin(phase + seed)
+                        c.stroke(path, with: .color(SaycribeColor.orange.opacity(
+                            0.12 + level * (0.28 + 0.30 * shimmer))),
+                            style: StrokeStyle(lineWidth: 0.9 + level * 0.9, lineCap: .round))
+                    }
+                    if recording {
+                        // 60 秒进度弧保持独立，始终贴近按钮。
+                        let prog = min(1, max(0, t / 60))
+                        var arc = Path()
+                        arc.addArc(center: ctr, radius: r0 + 9, startAngle: .degrees(-90),
+                                   endAngle: .degrees(-90 + 360 * prog), clockwise: false)
+                        c.stroke(arc, with: .color(SaycribeColor.orange),
+                                 style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    }
+                }
+                .frame(width: diameter + 120, height: diameter + 120)
+            }
+
+            Circle()
+                .fill(SaycribeColor.orangeDeep)
+                .frame(width: diameter, height: diameter)
+                .shadow(color: SaycribeColor.orangeDeep.opacity(0.35), radius: 16, y: 6)
+                .overlay {
+                    if recording {
+                        LevelBars(level: level)
+                    } else {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: diameter * 0.34, weight: .semibold))
+                            .foregroundStyle(SaycribeColor.textPrimary)
+                    }
+                }
+                .scaleEffect((1 + 0.12 * CGFloat(level)) * (pressed ? 0.96 : 1))
+                .animation(Motion.press, value: pressed)
+        }
+        .frame(width: diameter + 120, height: diameter + 120)
+        .task(id: recording) {
+            var previous = Date()
+            while !Task.isCancelled {
+                let now = Date()
+                let target = recording ? source.level(at: now.timeIntervalSince(start)) : 0
+                // 时间相关的快起慢落：停顿时稳定收拢，不用高回弹弹簧反复追逐音量。
+                let elapsed = now.timeIntervalSince(previous)
+                let response = target > level ? 0.075 : 0.22
+                level += (target - level) * (1 - exp(-elapsed / response))
+                previous = now
+                do {
+                    try await Task.sleep(nanoseconds: 33_333_333)
+                } catch {
+                    return // recording 改变或视图退出时结束旧采样任务。
+                }
+            }
+        }
+    }
+}
+
+/// 暖白镜像声羽：九条沿浅弧展开，成对跳动，停顿时收成细小的弧形刻度。
+struct LevelBars: View {
+    var level: Double
+    var count = 9
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30)) { ctx in
+            let t = ctx.date.timeIntervalSinceReferenceDate
+            HStack(spacing: 2.5) {
+                ForEach(0..<count, id: \.self) { i in
+                    let center = Double(count - 1) / 2
+                    let position = Double(i) - center
+                    let distance = abs(position) / max(1, center)
+                    let envelope = 1 - 0.55 * distance
+                    let syllable = 0.65 + 0.35 * sin(t * 7.2 - abs(position) * 0.85)
+                    Capsule()
+                        .fill(SaycribeColor.textPrimary)
+                        .frame(width: 3, height: 4 + CGFloat(level * envelope * syllable) * 28)
+                        .rotationEffect(.degrees(position * 5))
+                        .offset(y: CGFloat(distance * distance) * 7 - 3)
+                }
+            }
+            .frame(height: 40)
+        }
+    }
+}
+
+/// Logo 旁状态点 + 等宽标签
+struct BrandStatusTag: View {
+    var live: Bool
+    var tag: String
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(live ? SaycribeColor.orangeDeep : SaycribeColor.textTertiary)
+                .frame(width: 6, height: 6)
+            Text(tag)
+                .font(SaycribeType.overline)
+                .foregroundStyle(SaycribeColor.textSecondary)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(Capsule().stroke(SaycribeColor.border, lineWidth: 1))
+    }
+}
+
+ succeeded in 0ms:
+# 从这里开始
+
+工作笔记在左边按项目分文件夹。先看这一页，再进具体项目。
+
+## 主页上的四块
+
+| 页 | 看什么 |
+| --- | --- |
+| [今天做了什么](今天做了什么.md) | 今天记了哪些大类，点进去是每一件小事 |
+| [还没做完](还没做完.md) | 做到一半的项目，停在哪一步 |
+| [三个模型做了什么](三个模型做了什么.md) | Claude、Codex、Grok 各自做过的事，按项目分 |
+| [额度和订阅](额度和订阅.md) | 今天有没有记下 Token，订阅哪天到期 |
+
+[上次写到哪](上次写到哪.md) 是最近一条记录。长文档的一句话目录在 [库里有什么](库里有什么.md)。
+
+## 项目
+
+| 文件夹 | 是什么 |
+| --- | --- |
+| 图掌柜 | 电商作图软件 |
+| 华臻选货盘 | 华甄选礼品的选品。公司全称是深圳市华甄选礼品有限公司 |
+| 视频学习中控 | 2026 年 5 月的中控台。系统架构在 [中控台系统架构](../视频学习中控/长期资料/中控台系统架构.md) |
+| GALEX帐篷 | 充气帐篷独立站、1688、TikTok |
+| 家里的两台电脑 | 4060Ti 和 3060 |
+| 网络 | 代理 |
+| Claude和Apple | Claude 账号、Apple 登录和退款 |
+| 抖音Netflix仲裁 | 青岛仲裁，抖音扣了 2000 元 |
+| 人设和提示词 | 税务筹划和跨境视频分析的底稿。情感陪伴人设已删 |
+| 待办和灵感 | 待办和灵感 |
+| 本地听写翻译 | 本机听写和截图翻译 |
+| motomotos | Mac 刘海灵动岛（原 LocalNotch）。立项文档在 [说明](../motomotos/说明.md) |
+| 零散记录 | 零散的事。小智 3D 打印外壳的记录已经删了 |
+| 每日记录 | 所有项目混在一起的当天流水 |
+
+打开一个项目，先看里面的「现在做到哪」。
+
+## 软件用的规则
+
+这些给 Claude、Codex、Grok 开工读，人不用从这里学。
+
+- [开工要读什么](../prompts/开工要读什么.md)
+- [开发团队怎么协作](../prompts/agent-team-sop.md)
+- [默认启动指令](../prompts/agent-default.md)
+
+## 记录怎么写
+
+做完一件事写一条，日期放在文件名最后：
+
+`图掌柜/工作记录/登录页改完.2026-10-01-1530.md`
+
+不要把日期写在最前面。不要再用 HANDOFF、SESSION、TOPICS 当文件夹名。
+# 库里有什么
+
+每份长文档一句话。人先看 [从这里开始](从这里开始.md)。小智 3D 打印外壳的记录已经删了。
+
+- [Claude身份验证当前状态](../Claude和Apple/长期资料/Claude身份验证现在做到哪.md) — 用户转向Apple退款：9/30已提交Claude Pro US$20退款，待处理，页面预计10/2结果；此前身份验证更正已提交，账号尚未恢复。
+
+- [Claude出口守卫当前状态](../Claude和Apple/长期资料/Claude出口现在做到哪.md) — 2026-10-16 14:41 守卫在岗。桌面版连接已进 CLAUDE-GUARD，出口 72.13.234.2。9 月 28 日那次关闭已被这次覆盖。
+
+
+- [家庭远程控制当前状态](../家里的两台电脑/现在做到哪.md) — 4060Ti/3060双机原桌面、键鼠和同时连接均已实测；无人值守已配，外网/重启未测；回访已暂停。
+
+- [华甄选当前状态](../华臻选货盘/现在做到哪.md) — 2026-09-28 image09统一原文件入口已验收：8877/8891正常、八后缀处理及Laya调用、含图七字段/系统码人工草稿保存刷新通过，原16任务保留。模型错判/200件评测未完成；全局astra/xhigh与反馈规则实写，无定时回访。
+- [Agent默认入口](../prompts/agent-default.md) / [团队SOP](../prompts/agent-team-sop.md) — 2026-09-28全局astra/xhigh、逐岗主Agent审查和交付反馈已落地；禁止自行定时回访。
+- [Claude 和 Codex 的要点](../prompts/要点-我的总结.md) — 2026-10-01 根据他们的原 prompt 另写的阅读摘要。原文件保留。同一份工作习惯已写入 Grok 默认启动规则。正式分工仍是 agent-default.md 和 agent-team-sop.md。
+
+> 现在的进度在各项目的「现在做到哪」。做过的事在「工作记录」，日期在文件名最后。不会过期的说明在「长期资料」。软件开工看 [开工规则](../prompts/agent-default.md)。
+
+- [motomotos 立项文档](../motomotos/说明.md) — Mac 刘海灵动岛（原 LocalNotch，代码 `~/local-notch`，私有仓库 ygalex0927-eng/motomotos）。进度看 [现在做到哪](../motomotos/现在做到哪.md)。2026-10-26：线上支付宝+Creem+公网兑换可用；Developer 会员 Active（Team B7Z9AC87NF）；1.0.3 Developer ID 签名已验收，公证仍 In Progress，官网 DMG 仍是 Development 包；真付未测。
+- [NookX 深度拆解](../motomotos/长期资料/NookX 深度拆解.md) — 2026-10-28 本机 Nook X 2026.10.24 (112) 的功能、动效和可配置组件。设置页逐页看过，没改开关。样式网格和展开毫秒数没量到的都标了。
+- [NookX 改造交接](../motomotos/长期资料/NookX 改造交接.md) — 2026-10-30 拆解转成可执行的改造清单：岛外形、动效、设置窗口、组件皮肤、歌词，按优先级和文件落点写，带验收标准。
+
+- [图掌柜当前状态与接手清单](../图掌柜/现在做到哪.md) — 唯一当前进度入口，包含未提交文件、待验收任务、漏档与证据链接。
+- [图掌柜项目技术指南](../图掌柜/技术说明.md) — 原仓库技术指令统一迁入；默认 prompt、团队 SOP、归档规则不在其他文件重复维护。
+
+- [小何语音系统 · Xiaohe Voice](../零散记录/长期资料/小何语音系统.md) — 膏哥的「语音系统」/5173端口=`~/Desktop/hermes-voice-web`(React+Electron桌面App「小何/湾湾」)。走Google Gemini Live端到端实时语音(STT+LLM+TTS,模型gemini-3.1-flash-live-preview/音色Aoede/普通话)+SQLite长期记忆+语音操控Mac(execute_shell/AppleScript/提醒)+Google联网;三层=three.js 3D语音球前端 / proxy.js v10代理 / 8655大脑桥;早期用火山豆包实时语音(doubaoProtocol.js)后切Gemini但字段名沿用doubao_audio。⚠️别跟hermes聊天/视频dashboard(8765)或clawhouse语音克隆搞混
+- [GALEX 视频自动化系统](../GALEX帐篷/长期资料/视频自动化说明.md) — 新媒体部门全套:素材库(99片段)→ 混剪引擎(match-cut+卡点)→ 每日定时生成2条 → 半自动发布 → WeClaw 微信遥控 → 质检铁律 → Veo/GCP现状
+- [TikTok 爆款方法论 Playbook](../GALEX帐篷/长期资料/TikTok爆款打法.md) — 从 4060Ti 知识库 ~25 份学习资料(2026-05-09~05-28)提炼,喂给"AI视频主编大脑":Hook(13+英文句式)/结构节奏/字幕CTA规格/运镜/「变船」反差排布/避坑。配合 galex-video-system 第七节质检铁律用(那是画面真不真,这是内容爆不爆)
+- [膏哥私人助理 my-assistant](../待办和灵感/说明.md) — 待办 + 灵感收集箱,三机同步。触发词「看我的待办 / 看我的灵感 / 记个待办X / 记个灵感X」,写入约定见该 README
+- [Backyard Bird Mind 账号分析](../零散记录/长期资料/后院鸟号分析.md) — faceless 后院动物拟人号深度拆解 + YouTube 同类竞品对比;核心洞察:选松鼠>鸟、温情>猎奇、标题用「If a[动物]…」模板、每2天更广撒赌爆款
+- [后院松鼠号 复刻启动包](../零散记录/长期资料/后院松鼠号启动包.md) — 可直接开干:执行摘要 + 50 选题库(S/A/B档) + 标题8模板/30成品标题 + 13分钟脚本模板与范例 + 制作变现SOP + 第一周清单;含真实字幕(yt-dlp)逆向出的7个开场钩子+签名句。爆款字幕落地本机 Temp/squirrel_clean.txt、rabbit_clean.txt。⚠️后续实证:松鼠+整个"动物拟人冷知识"套路已全红海、48h被克隆,此包仅作套路样本,勿直接开干
+- [红雀逝者慰藉号 完整规划](../零散记录/长期资料/红雀慰藉号规划.md) — 替代松鼠的抗克隆方向(已实证8题材全红海后定的):红雀=逝者来访温情慰藉号,对标Bird Mind但靠真人英文配音+真实改编故事+固定人格=克隆抄不走的护城河;45选题/脚本模板+范例/远程真实感落地/红雀纪念品变现(膏哥工厂供应链);红线=温暖不通灵、一假全崩
+- [图掌柜桌面控制配置：8/28历史快照](../图掌柜/长期资料/tzg-桌面控制-computer-use-配置.md) — 含敏感配置，只按任务需要读取，不外传。历史缺口不能当当前结论；先读 current。
+- [图掌柜 Agent 模块：8/27历史技术交接](../图掌柜/长期资料/tuzhanggui-agent模块技术交接-20260827.md) — 浏览器主线/Windows不可用等旧判断已被后续记录纠正；最新状态与源码接线见 current。
+- [★★★图掌柜「直播监控录制」模块·开发需求 v1](../图掌柜/长期资料/tuzhanggui-直播监控录制模块-开发需求.md) — **复刻江湖工具箱功能·给Mac开工**。输入抖音号→后台盯开播→自动ffmpeg拉流录制→关播归档,多账号并发。4060实机逆向江湖工具箱(直播监控录制.exe+JHlib/ffmpeg):核心难点=抖音签名反爬,解法=**内嵌浏览器内核(江湖用WebView2/EBWebView实锤)借抖音JS自己签名+复用登录cookie**,不逆算法。图掌柜优势:本身是Electron自带Chromium,用隐藏窗口+webRequest嗅探播放器的flv/m3u8请求拿流地址(路子A,不碰签名)+复用视频模块内置ffmpeg -c copy录制。**零成本零新依赖**(不需付费API/RunningHub/GPU)。含数据模型(照RoomDJInfo实锤字段)/依赖清单/抖音接口(标来源)/⛔合规红线(版权+平台协议+肖像,灰区仅授权自有内容)。数据模型/流程/前置核实齐全
+- [★★★图掌柜「图片换人换背景」模块·开发需求 v1](../图掌柜/长期资料/tuzhanggui-图片换人换背景模块-开发需求.md) — **给Mac开工**。源码逆向CONFIRMED(ClawHouse RunningHub workflowId 1977229030422388737,3字段A图/B图/分辨率480·720·1080,无提示词,39000积分/次avg154s成功率92%)。图掌柜路线:MVP用现成GPT Image双图i2i换脸(免费,1张额度/次vs ClawHouse 3.9万积分);⚠M0硬门槛=先拿3-5组真人图验身份保真够不够,不达标直接走二期接专门换脸后端(RunningHub同款/本地ComfyUI ReActor·InstantID·PuLID)。含换脸i2i prompt母版/照抄的字段文案/stage→tasks链路/⛔合规红线(肖像权民法典1019+深度合成规定,须授权勾选+AI合成标识)/前置核实/验收
+- [★★★★图掌柜「视频大模块」完整开发文档(总设计+分阶段)](../图掌柜/长期资料/tuzhanggui-视频大模块-开发文档.md) — **视频板块总文档·Mac开工用**。整合全部视频类调查(6模块源码逆向+真机跑通一条)。⭐核心洞察:ClawHouse 6个视频模块=**同一条5层流水线**(脚本分镜→画面素材→动态化→音频→ffmpeg合成)的不同配置,图掌柜只需做「一套5层底层+上层多视频类型」,新增类型=配一套幕母版。分阶段:**P0 AI产品视频**(本地运镜+无配音,3-4张出图额度)→**P1 本地商家宣传片**(用户素材直剪,**0出图额度**,ClawHouse同功能要1.6万积分)→P2(真i2v/TTS/口播数字人/对口型/动作迁移,需膏哥拍板引擎)。含统一JSON schema(一套覆盖全类型)/ffmpeg配方全集(运镜zoompan+白底不裁剪+双轨混音P2备用+烧字幕)/幕母版/UI/验收/前置核实/合规红线(人脸声音须授权)
+- [★★★图掌柜「AI产品视频」大模块·开发需求 v1](../图掌柜/长期资料/tuzhanggui-AI产品视频模块-开发需求.md) — 上面那份的 **P0 详细篇**(单模块逐字需求) — **给Mac开工·MVP路线膏哥已拍板**。链路:DeepSeek出分镜大纲+旁白(固定3幕母版填空)→GPT Image出纯净i2i首帧图(产品保真)→**本地ffmpeg运镜(zoompan把死图变动)+拼接+混BGM+烧字幕**→final.mp4。⭐两后端选型膏哥定:图生视频=本地运镜MVP(不接真i2v)、旁白=无配音字幕+BGM(不接TTS)→0付费0新后端不踩火山红线。成本碾压:ClawHouse一条33万积分,图掌柜MVP一条仅3-4张免费出图额度+本地渲染≈0。含分镜JSON schema/ffmpeg配方原文(从ClawHouse扒·可直接抄)/字幕字体坑(用PingFang SC非微软雅黑,烧录定死不依赖终端字体)/5里程碑/前置核实/二期升级到真i2v+TTS的平滑路径
+- [★★★图掌柜「AI生成PPT」大模块·开发需求 v2](../图掌柜/长期资料/tuzhanggui-PPT模块-开发需求.md) — **给Mac直接开工的功能方案**(已过对抗式评审)。技术路线:pptxgenjs渲染真.pptx + DeepSeek母版填空出大纲 + genapi满屏AI大图扛质感(超越ClawHouse配图弱)+复用图掌柜全栈不引入Codex。13版式母版库×5主题;两段式(大纲→配图→成片);零积分(大纲白嫖DeepSeek/配图走genapi独立子预算别饿死电商主图)。主Agent已拍板计费/默认/阈值/文案。含大纲JSON schema/配图role比例/落盘约定/5里程碑M1-M5/开工前置核实项(genapi封装/LibreOffice/CJK东亚字体槽ea/额度隔离)。⚠硬门槛:M1先烧中文.pptx双端(Mac LibreOffice+Windows WPS)验字体不丢
+- [★★★ClawHouse「AI产品视频」真机实操全记录 REALTEST](../图掌柜/长期资料/clawhouse-ai-product-video-REALTEST.md) — **亲手跑通一条·CDP驱动**。①全下拉框选项(画面比例/视频模型/投放平台9/语言/风格/火山声线10/BGM30首/字幕/时长);②两段式提示词变化(填参数→本地模板即时填画面想法0积分→点生成分镜草稿→AI改写成带小红书调性3幕叙事+旁白+营销标题);③⭐积分实测总账:分镜草稿1万+分镜图10万+成片22万=**33万/条**(官方标价22万只是成片那步,真实高50%,云端准备也实扣);④成片实证desktop-local-render:final.mp4(720×1264/24fps/21s)落D盘+ffmpeg配方filtergraph原文可照抄(BGM混音volume0.86/0.18=UI滑块直映射/静态段/字幕烧录)+segment-03图生视频降级静态图;⑤火山TTS=每段narration.mp3。榨汁杯图→专业竖版短视频产品保真度高
+- [★★竞品 ClawHouse 工作流10模块·完整流程/后端/积分拆解 FLOW](../图掌柜/长期资料/clawhouse-10-workflows-FLOW.md) — **克隆蓝图·0积分源码逆向+20子Agent对抗核验**。10模块逐个:操作步骤/字段/后端引擎/RunningHub workflowId/积分/prompt/克隆点。⭐金矿:6个工具模块的RunningHub workflowId客户端可扒(换人换背景1977229030422388737/高清修复1965719821155500034/对口型2031016553440878594/语音克隆1965684535247650818/去水印2046217304085635074/动作迁移1975951975441412098);高清修复正负提示词+双Lora默认值全扒到。架构三分法(图片走RunningHub生图/视频分本地渲染vs云端生成/音频);统一网关124.220.216.160+错误脱敏正则;积分↔成本换算(1元≈25万积分,余额171万≈6.8元,动作迁移最贵32.5万/次);⛔火山在此是TTS配音非出图(禁令不适用,待膏哥拍板)。含克隆优先级
+- [★竞品 ClawHouse 全软件拆解·第一步功能清单](../图掌柜/长期资料/clawhouse-full-app-decomposition.md) — **整机拆解(非单模块)**:0积分双证(解包源码+CDP只读菜单)。5大板块(AI对话/自动化模式/工作流/无限画布/积分商店);工作流=10个专用模块(电商图片专家+AI产品视频+本地宣传剪辑+AI口播+换人换背景+高清修复+数字人对口型+语音克隆+去水印+动作迁移);自动化专家商城203个专家=约63种唯一角色(电商166=20角色×8平台复制),坐实"水分足":底层就是同一Codex换system prompt模板`你是专业的{平台}{角色}，{roleFocus}`;专业助手=按category过滤+Codex官方25技能包壳。结论:真护城河在10个工作流(接RunningHub云多模态),专家商城纯prompt堆量。后续技术反推/深度分析/思维导图待发话
+- [竞品 ClawHouse 电商图片专家 逆向研究](../图掌柜/长期资料/competitor-clawhouse-ecom-image-reverse-research.md) — 图掌柜头号竞品对标(U盘便携版,装在4060Ti E盘)。定性:官方Codex(rust app-server)内核+Electron壳+自建OpenAI兼容网关124.220.216.160/v1+RunningHub云端生图聚合(GPT Image2/NanoBanana/Qwen/Z-Image/Grok全走runninghub,按张积分计费)。电商图片专家核心=先出"图需"(营销任务分解)再生图。图掌柜借鉴:①两段式图需流程②网关+国产已备案聚合③合规牌超越(ClawHouse用境外未备案模型踩红线)
+- [ClawHouse 电商图片专家 深度实测](../图掌柜/长期资料/clawhouse-ecom-image-expert-deep-test.md) — 上一份的真机实测深化(CDP驱动模拟人工点击,跑通3领域:榨汁杯抖音/女装小红书/美妆天猫)。核心:三步SOP(素材卖点→图需确认→生成导出),老板不写提示词只填产品参数+卖点,大模型自动出"成品图集"(主图/卖点/功能/场景四件套);平台×品类×风格自适应真智能+广告法合规护栏=能直接上架。成本实测:生图~2.75万积分/张,一套4张~11万,图需~1-3万/次。成品图证据在assets/clawhouse-ecom-image/
+- [★★图掌柜「电商图片专家」页面布局/排版/功能模块规格 PAGE-LAYOUT](../图掌柜/长期资料/clawhouse-ecom-image-PAGE-LAYOUT.md) — **给Mac改前端·1:1还原**。真机CDP抓控件精确坐标(视口1280×871)+截图。整体=左固定导航栏(~250px)+右主区;三步流程;产品参数/卖点左右并排各468宽;高级设置3列×2行下拉(全选项);图需预览三栏(图片主题220/画面要求360/文案需求360可编辑);生成记录逐张下载。含坐标表+交互状态+配色。截图pg_1~4在assets/。发现:稳定版才出质量下拉、客户自定义平台/风格弹自定义输入框
+- [★★★图掌柜「电商图片专家」页面功能+提示词填空母版 SLOT-TEMPLATES](../图掌柜/长期资料/clawhouse-ecom-image-SLOT-TEMPLATES.md) — **膏哥核心诉求落地**:①页面功能清单(图掌柜前端1:1还原)②把风格理解/图片主题/画面要求/文案需求4块拆成"填空题母版"(固定骨架+{{槽位}}),让DeepSeek只填空不随机生成、质量稳定。每块=固定骨架+槽位表(谁填/榨汁杯示例/选项映射)+填好完整示例;含Amazon等跨境白底override风格成无文案的条件分支。统一槽位命名(选项直填{{平台}}{{作图风格}}{{文案语言}}{{图片比例}}+AI填{{产品名}}{{核心卖点n}}等)。基于32真机样本抽象
+- [★★★图掌柜「电商图片专家」每个选项生成的完整提示词·真机穷举全记录 OPTION-PROMPTS](../图掌柜/长期资料/clawhouse-ecom-image-OPTION-PROMPTS.md) — 6作图风格+8文案语言+18平台每个都选一遍各点一次生成图需,**完整记录每个选项生成的 风格理解+平台策略+提醒 + 图需预览主图三要素(图片主题/画面要求/文案需求)全文**。同款榨汁杯基准只变一个维度,32次共烧约4万积分。可直接当图掌柜的few-shot库/母版槽位参照/回归基线。配套ADVANCED-OPTIONS(确定性层规律)
+- [★★图掌柜「电商图片专家」高级设置每选项对提示词影响规律 ADVANCED-OPTIONS](../图掌柜/长期资料/clawhouse-ecom-image-ADVANCED-OPTIONS.md) — 逆向+真机实测每个高级设置选项选完后底层图需(提示词)怎么变。核心:提示词分确定性层(label插值)+LLM层。⭐版本(性价比/稳定)和质量(高/中)不进图需请求、对提示词零影响,只换生图模型档/清晰度(稳定版才多出质量下拉);比例只改"画幅为X"首句;语言只改"文案语言使用X";平台改图位前缀+LLM定调性;风格改"风格依据"+LLM定文案密度(客户自定义特殊)。⭐关键:平台硬规则override风格(Amazon切白底无字即使选促销风)。0额度确定性对照+8万积分隔离实测双证
+- [★★★图掌柜「电商图片专家」美工总监Prompt实战验证+12场景图需库 VALIDATION](../图掌柜/长期资料/clawhouse-ecom-image-VALIDATION.md) — **反推prompt已验证·可开单**。开12子Agent各灌反推的美工总监system prompt扮演该角色,主Agent设计12陌生场景(空气炸锅拼多多/冲锋衣天猫/口红抖音/坚果淘宝/耳机京东/床品/背带小红书/银链/瑜伽垫Amazon英文/保温杯TikTok英文/猫粮/充电宝,8+品类×10平台×6风格×中英文)考它们。结果12/12一次通过:张数正确+guidance三段齐全+平台自适应真生效+合规护栏真生效(美妆功效软化/食品不引申健康/母婴宠物不作医疗承诺)。含逐场景验证表+12套完整图需(可直接当few-shot/回归用例)。结论:反推prompt达可投产标准
+- [★★图掌柜「电商图片专家」流程与中间层逻辑拆解 FLOW-LOGIC](../图掌柜/长期资料/clawhouse-ecom-image-FLOW-LOGIC.md) — **克隆前先读这份**。讲清:用户操作(选参考图/提示词模式+填产品资料+高级设置+点生成图需预览)vs 系统自动生成(点一下,中间层AI自动吐"风格理解+图片主题+画面要求+文案需求"4类,下拉选项AI不碰)。核心=中间层"DeepSeek层"为什么能把一句白话变专业提示词的5机制(角色扮演+品类图集模板+平台调性模板+卖点分配+强制格式/合规/few-shot)。含榨汁杯真实转化实录(白话输入→专业图需输出一字未改)+确认的数据流(生成图需→/briefs;生成图片→/tasks再翻译成稳定提示词→图模型)
+- [★★图掌柜「电商图片专家」ClawHouse官方提示词模板原文 OFFICIAL-TEMPLATES](../图掌柜/长期资料/clawhouse-ecom-image-OFFICIAL-TEMPLATES.md) — 膏哥收到的ClawHouse官方4份生图提示词模板(桌面clawhouse文档的4个docx)**原文照拷**:①通用文生图15范例+可替换元素体系②服装Image2首帧全元素可替换母版(最核心,服饰强一致锁死+人物/背景/姿态/镜头/光影/色调/氛围/材质全可替换+中英双语+负面词)③服装精简母版④Seedance2.0图生视频母版(分镜+变装+旁白)。定位=翻译层生图prompt母版(服装品类);图需中间层prompt在服务器(见REAL-PROMPTS反推版)。mac安装指南=纯截图无prompt
+- [★★图掌柜「电商图片专家」U盘真实Prompt原文 REAL-PROMPTS](../图掌柜/长期资料/clawhouse-ecom-image-REAL-PROMPTS.md) — **从U盘逆向提取的ClawHouse真实prompt,能拷的都拷了**:①完整本地图需模板fd函数(主图/场景/卖点/细节/对比/组合 6图位真实代码+三要素写法)②53条真实技能system prompt(卖点文案/详情页/标题/Listing/小红书/差评等电商相关原文,含模板化机制"你是专业的${name}，${roleFocus}")③imagegen技能真实prompt(先写image brief方法论+合规护栏)。诚实边界:图需主prompt在服务器拿不到,用CLONE-SPEC模块A反推版(对齐服务器质量)。含PM落地清单+验收
+- [★图掌柜「电商图片专家」克隆蓝图 CLONE-SPEC](../图掌柜/长期资料/clawhouse-ecom-image-CLONE-SPEC.md) — **给Mac Claude Code照着一比一克隆的逐字施工蓝图(7.4万字,4模块)**。模块A=美工总监完整system prompt(角色+18平台调性库+6风格+8品类图集库+广告法敏感词对照表+强制JSON输出格式+3个实测few-shot);模块B=图需→稳定生图prompt翻译层system prompt+各图位生图母版+服装全元素母版+负面词库+产品保真铁律;模块C=三步工作流+每个UI字段/选项+两层预览机制+状态机+完整数据Schema;模块D=三层解耦+两段式架构+API契约+生图后端国产已备案替代(火山即梦/通义万相)+6阶段Mac复刻施工步骤+合规改造。本质:把美工总监写成两段prompt,纯prompt工程不训模型。
+
+- [Apple ID / iCloud 诊断当前状态](../Claude和Apple/长期资料/Apple账号现在做到哪.md) — 9月28日Claude网页Apple登录已成功、Free；iPad设置已显示原账户，App登录待查；最终目标为Apple余额购买Pro月付，未扣款。
+
+- [Grok 默认开发规则整合包状态](../零散记录/现在做到哪.md) — 2026-10-07 整合版 2026-10-07.1 已写好；全局未替换，真实 Grok 委派待验。
+
+exec
+/bin/zsh -lc 'for p in /AGENTS.md /Users/AGENTS.md /Users/zjh/AGENTS.md /Users/zjh/claude-workdir/AGENTS.md /Users/zjh/claude-workdir/suikou/AGENTS.md /Users/zjh/claude-workdir/suikou/platforms/AGENTS.md /Users/zjh/claude-workdir/suikou/platforms/ios/AGENTS.md; do if [ -f "$p" ]; then cat "$p"; fi; done' in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 0ms:
+# 全局 Agent 规则 — 膏哥的 Mac
+
+## 暗号触发
+
+当用户说「**你现在接着做 Claude Code 的工作**」时，必须立即执行以下步骤，不得跳过：
+
+1. 读取 `~/ecom-agent-memory/prompts/开工要读什么.md`
+2. 读取 `~/ecom-agent-memory/视频学习中控/长期资料/中控台系统架构.md`
+3. 读取 `~/ecom-agent-memory/0-主页/上次写到哪.md`（没有就读 `0-主页/从这里开始.md`，再按任务打开对应项目的 `现在做到哪.md`）
+4. 读取 `~/ecom-agent-memory/每日记录/流水.今天日期.md`（文件名形如 `流水.2026-10-01.md`，没有就跳过）
+5. 回复：「已读取交接记录，上次进度：[用一句话总结最新一笔里的下一步]，我继续。」
+
+读完后直接进入工作状态，不需要用户再解释背景。
+
+---
+
+## 基本约束
+
+- 用户称呼：膏哥
+- 回复语言：中文
+- API Key / Token 不写进代码
+- L3 及以上风险操作必须报告用户审批
+- 完成多步骤任务后必须写交接：`cd ~/ecom-agent-memory && python3 save_handoff.py ...`
+
+## 工具自己装
+
+任务缺工具时，自己选定、安装、调用，做到完成为止。不要等膏哥点名该装什么。
+
+- 先用已经接上的工具。不够再装：Grok 插件、MCP、项目依赖、本机命令行工具。装完就用，用结果交付。
+- 新装的插件或 MCP 若这一轮会话读不到，用命令行把同一件事做完，并写明新会话才会出现在工具列表里。
+- 要登录态网页时，自己拉起调试 Chrome（`~/chrome-debug-profile`，端口 9222），用 chrome-devtools。日常 Chrome 不动。
+- 普通工具安装直接做。仍先停下来问的只有：大量删除、`rm -rf`、force-push、花钱、以膏哥身份对外发消息、改生产配置、要管理员密码或会改掉看得见的系统默认行为的安装。
+- 测试时自己装过的东西要记清单（项目目录、依赖、虚拟环境、缓存、全局包、为它改过的配置）。膏哥一说删，清单上的全部一起删，只留他原来就有的。不删别的项目，也不留 node_modules、venv 或半截安装。
+
+exec
+/bin/zsh -lc 'rg --files DesignPreview | head -50' in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 0ms:
+DesignPreview/Info.plist
+DesignPreview/DesignTokens.swift
+DesignPreview/Components/SharedChrome.swift
+DesignPreview/Screens/DemoScreen.swift
+DesignPreview/Screens/KeyboardGuideScreen.swift
+DesignPreview/Screens/MicPermissionScreen.swift
+DesignPreview/Screens/AddKeyboardScreen.swift
+DesignPreview/Screens/PrivacyScreen.swift
+DesignPreview/Screens/KeyboardLayoutScreen.swift
+DesignPreview/Screens/MainAppScreens.swift
+DesignPreview/Motion/MotionShowcase.swift
+DesignPreview/Motion/Motion.swift
+DesignPreview/DesignExportApp.swift
+
+exec
+/bin/zsh -lc "sed -n '440,820p' DesignPreview/Motion/MotionShowcase.swift" in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 0ms:
+                        }
+                    }
+                    .padding(.horizontal, 20)
+
+                    HStack {
+                        LangSwitchChip()
+                            .frame(width: 44, height: 36)
+                        Spacer()
+                        Text("换行")
+                            .font(SaycribeType.subheadMedium)
+                            .foregroundStyle(SaycribeColor.textPrimary)
+                            .frame(width: 108, height: 40)
+                            .background(Capsule().fill(SaycribeColor.keyCap))
+                            .overlay(Capsule().stroke(SaycribeColor.border, lineWidth: 1))
+                    }
+                    .padding(.horizontal, 20).padding(.bottom, 22).padding(.top, 4)
+                }
+                .background(SaycribeColor.keyboardBg)
+                .offset(y: keyboardOffset)
+                .animation(Motion.keyboardFollow, value: keyboardOffset)
+            }
+        }
+        .task {
+            let locked = ProcessInfo.processInfo.arguments.contains("-designPage")
+                || UserDefaults.standard.string(forKey: "designPage") != nil
+            withAnimation(Motion.fade) { showHost = true }
+            withAnimation(Motion.keyboardFollow) { keyboardOffset = 0 }
+            // 空闲态：点击说话 + 麦标；录音态留给 04
+            recording = false
+            mode = "语音"
+            if locked { return }
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            for m in ["EN", "拼", "语音"] {
+                withAnimation(Motion.morph) { mode = m }
+                try? await Task.sleep(nanoseconds: 900_000_000)
+            }
+            // 按下回弹演示，仍保持空闲麦标
+            withAnimation(Motion.press) { }
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            withAnimation(Motion.morph) { mode = "EN" }
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            withAnimation(Motion.morph) { mode = "语音" }
+        }
+    }
+
+    private func roundKey(_ icon: String, accent: Bool = false) -> some View {
+        Image(systemName: icon)
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundStyle(accent ? SaycribeColor.orange : SaycribeColor.textPrimary)
+            .frame(width: 48, height: 48)
+            .background(Circle().fill(accent ? SaycribeColor.orangeSoft : SaycribeColor.keyCap))
+            .overlay(Circle().stroke(accent ? SaycribeColor.orange.opacity(0.35) : SaycribeColor.border, lineWidth: 1))
+    }
+}
+
+// MARK: - 音量输入（第六版）
+/// 音量 0…1。真实 App 里来自录音 RMS；DesignPreview 用模拟曲线。
+protocol AudioLevelSource {
+    func level(at t: TimeInterval) -> Double
+}
+
+/// 模拟曲线：大声 → 小声 → 停顿（≈0）→ 再大声，带自然抖动。
+struct SimulatedAudioLevel: AudioLevelSource {
+    var loudOnly = false
+    /// 各段起点（秒，自录音开始）
+    static let softAt: TimeInterval = 3.5
+    static let pauseAt: TimeInterval = 6.5
+    static let loudAgainAt: TimeInterval = 9.0
+
+    func level(at t: TimeInterval) -> Double {
+        guard t > 0 else { return 0 }
+        let jitter = 0.5 + 0.5 * sin(t * 9.1) * sin(t * 3.7 + 1.3)
+        let base: Double
+        if loudOnly || t < Self.softAt || t >= Self.loudAgainAt {
+            base = 0.72 + 0.26 * jitter
+        } else if t < Self.pauseAt {
+            base = 0.18 + 0.14 * jitter
+        } else {
+            base = 0.02 * jitter
+        }
+        let attack = min(1, t / 0.25)
+        return max(0, min(1, base * attack))
+    }
+}
+
+/// 录音主按钮：陶土橙圆 + 随音量舒展的碎弧花冠 + 60 秒进度弧。
+struct VoiceOrb: View {
+    var recording: Bool
+    var start: Date
+    var pressed: Bool
+    var source: AudioLevelSource = SimulatedAudioLevel()
+    var diameter: CGFloat = 88
+
+    @State private var level: Double = 0
+
+    var body: some View {
+        ZStack {
+            TimelineView(.animation(minimumInterval: 1.0 / 30)) { ctx in
+                let t = max(0, ctx.date.timeIntervalSince(start))
+                Canvas { c, size in
+                    let ctr = CGPoint(x: size.width / 2, y: size.height / 2)
+                    let r0 = diameter / 2
+                    // 一条断开的不规则花冠，各短弧有独立相位与径向错位；没有闭合光晕。
+                    // 半径硬上限 r0 + 56，含描边外沿默认 ≤ 101pt，不参与按钮缩放。
+                    for fragment in 0..<13 {
+                        let seed = Double(fragment)
+                        let phase = t * 0.45 + seed * 2.39996
+                        let breath = 0.5 + 0.5 * sin(t * 0.85 + seed * 0.3)
+                        let spread = 5 + 35 * level
+                        let stagger = (0.5 + 0.5 * sin(seed * 1.7)) * (2 + 7 * level)
+                        let base = Double(r0) + 9 + spread - stagger + breath * 0.8
+                        let centerAngle = seed / 13 * 2 * Double.pi + 0.04 * sin(phase)
+                        let span = (0.19 + 0.11 * (0.5 + 0.5 * sin(seed * 3.1))) * (0.85 + 0.15 * level)
+                        var path = Path()
+                        for sample in 0...20 {
+                            let u = Double(sample) / 20
+                            let angle = centerAngle + (u - 0.5) * span
+                            let petal = sin(angle * 3 + phase) * 0.62
+                                + sin(angle * 5 - phase * 0.71) * 0.38
+                            let radius = min(Double(r0) + 56, base + (0.5 + 7 * level) * petal)
+                            let point = CGPoint(x: ctr.x + CGFloat(radius * cos(angle)),
+                                                y: ctr.y + CGFloat(radius * sin(angle)))
+                            if sample == 0 { path.move(to: point) } else { path.addLine(to: point) }
+                        }
+                        let shimmer = 0.5 + 0.5 * sin(phase + seed)
+                        c.stroke(path, with: .color(SaycribeColor.orange.opacity(
+                            0.12 + level * (0.28 + 0.30 * shimmer))),
+                            style: StrokeStyle(lineWidth: 0.9 + level * 0.9, lineCap: .round))
+                    }
+                    if recording {
+                        // 60 秒进度弧保持独立，始终贴近按钮。
+                        let prog = min(1, max(0, t / 60))
+                        var arc = Path()
+                        arc.addArc(center: ctr, radius: r0 + 9, startAngle: .degrees(-90),
+                                   endAngle: .degrees(-90 + 360 * prog), clockwise: false)
+                        c.stroke(arc, with: .color(SaycribeColor.orange),
+                                 style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    }
+                }
+                .frame(width: diameter + 120, height: diameter + 120)
+            }
+
+            Circle()
+                .fill(SaycribeColor.orangeDeep)
+                .frame(width: diameter, height: diameter)
+                .shadow(color: SaycribeColor.orangeDeep.opacity(0.35), radius: 16, y: 6)
+                .overlay {
+                    if recording {
+                        LevelBars(level: level)
+                    } else {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: diameter * 0.34, weight: .semibold))
+                            .foregroundStyle(SaycribeColor.textPrimary)
+                    }
+                }
+                .scaleEffect((1 + 0.12 * CGFloat(level)) * (pressed ? 0.96 : 1))
+                .animation(Motion.press, value: pressed)
+        }
+        .frame(width: diameter + 120, height: diameter + 120)
+        .task(id: recording) {
+            var previous = Date()
+            while !Task.isCancelled {
+                let now = Date()
+                let target = recording ? source.level(at: now.timeIntervalSince(start)) : 0
+                // 时间相关的快起慢落：停顿时稳定收拢，不用高回弹弹簧反复追逐音量。
+                let elapsed = now.timeIntervalSince(previous)
+                let response = target > level ? 0.075 : 0.22
+                level += (target - level) * (1 - exp(-elapsed / response))
+                previous = now
+                do {
+                    try await Task.sleep(nanoseconds: 33_333_333)
+                } catch {
+                    return // recording 改变或视图退出时结束旧采样任务。
+                }
+            }
+        }
+    }
+}
+
+/// 暖白镜像声羽：九条沿浅弧展开，成对跳动，停顿时收成细小的弧形刻度。
+struct LevelBars: View {
+    var level: Double
+    var count = 9
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30)) { ctx in
+            let t = ctx.date.timeIntervalSinceReferenceDate
+            HStack(spacing: 2.5) {
+                ForEach(0..<count, id: \.self) { i in
+                    let center = Double(count - 1) / 2
+                    let position = Double(i) - center
+                    let distance = abs(position) / max(1, center)
+                    let envelope = 1 - 0.55 * distance
+                    let syllable = 0.65 + 0.35 * sin(t * 7.2 - abs(position) * 0.85)
+                    Capsule()
+                        .fill(SaycribeColor.textPrimary)
+                        .frame(width: 3, height: 4 + CGFloat(level * envelope * syllable) * 28)
+                        .rotationEffect(.degrees(position * 5))
+                        .offset(y: CGFloat(distance * distance) * 7 - 3)
+                }
+            }
+            .frame(height: 40)
+        }
+    }
+}
+
+/// Logo 旁状态点 + 等宽标签
+struct BrandStatusTag: View {
+    var live: Bool
+    var tag: String
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(live ? SaycribeColor.orangeDeep : SaycribeColor.textTertiary)
+                .frame(width: 6, height: 6)
+            Text(tag)
+                .font(SaycribeType.overline)
+                .foregroundStyle(SaycribeColor.textSecondary)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(Capsule().stroke(SaycribeColor.border, lineWidth: 1))
+    }
+}
+
+exec
+/bin/zsh -lc 'cat DesignPreview/DesignTokens.swift DesignPreview/Motion/Motion.swift DesignPreview/DesignExportApp.swift' in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 0ms:
+import SwiftUI
+
+/// Saycribe 配色：来自牙膏哥指定的品牌规范（暗色）。只许黑 / 暖灰 / 暖白 / 陶土橙。
+enum SaycribeColor {
+    /// 主背景
+    static let bg = Color(hex: 0x0C0C0B)
+    /// 次级背景：bg 上叠白 4%（暖黑，无色偏）
+    static let bgElevated = Color(hex: 0x141412)
+    /// 卡片
+    static let card = Color(hex: 0x1A1917)
+    /// 卡片抬起一档
+    static let cardRaised = Color(hex: 0x2A2826)
+    /// 陶土橙：accent 暗 #E08A6C / 橙本体 #D97757
+    static let orange = Color(hex: 0xE08A6C)
+    static let orangeDeep = Color(hex: 0xD97757)
+    /// 橙软底 = #D97757 @20%
+    static let orangeSoft = Color(hex: 0xD97757, opacity: 0.20)
+    /// 文字层级
+    static let textPrimary = Color(hex: 0xF5F3EE)
+    static let textSecondary = Color(hex: 0x9A968C)
+    static let textTertiary = Color(hex: 0x5C584F)
+    /// sep 白 10%；fill 白 8%
+    static let border = Color.white.opacity(0.10)
+    static let borderStrong = Color.white.opacity(0.16)
+    static let fill = Color.white.opacity(0.08)
+    /// 状态色也收进三色：成功用暖白，警示用橙
+    static let success = Color(hex: 0xF5F3EE)
+    static let danger = Color(hex: 0xD97757)
+    /// 键盘区
+    static let keyboardBg = Color(hex: 0x1A1917)
+    static let keyCap = Color(hex: 0x22211F)
+    /// 主 CTA / 空闲录音钮：暖白底 + 深字
+    static let surfaceBright = Color(hex: 0xF5F3EE)
+    static let onBright = Color(hex: 0x0C0C0B)
+
+    static let warmBg = bg
+}
+
+/// 字体层级：来自牙膏哥指定的品牌规范（SF Pro / PingFang / SF Mono）
+enum SaycribeType {
+    static func f(_ size: CGFloat, _ w: Font.Weight = .regular) -> Font { .system(size: size, weight: w) }
+    static func mono(_ size: CGFloat, _ w: Font.Weight = .regular) -> Font { .system(size: size, weight: w, design: .monospaced) }
+    static let largeTitle = f(34, .bold)
+    static let title1 = f(28, .bold)
+    static let title3 = f(20, .semibold)
+    static let headline = f(17, .semibold)
+    static let body = f(17)
+    static let subhead = f(15)
+    static let subheadMedium = f(15, .medium)
+    static let footnote = f(13)
+    static let caption = f(12)
+    static let overline = mono(11, .medium)
+}
+
+enum SaycribeRadius {
+    static let xl: CGFloat = 28
+    static let lg: CGFloat = 22
+    static let md: CGFloat = 16
+    static let sm: CGFloat = 12
+    static let pill: CGFloat = 999
+}
+
+enum SaycribeFont {
+    static func display(_ size: CGFloat) -> Font { .system(size: size, weight: .bold) }
+    static func title(_ size: CGFloat) -> Font { .system(size: size, weight: .semibold) }
+    static func body(_ size: CGFloat) -> Font { .system(size: size, weight: .regular) }
+    static func medium(_ size: CGFloat) -> Font { .system(size: size, weight: .medium) }
+}
+
+extension Color {
+    init(hex: UInt32, opacity: Double = 1) {
+        let r = Double((hex >> 16) & 0xFF) / 255
+        let g = Double((hex >> 8) & 0xFF) / 255
+        let b = Double(hex & 0xFF) / 255
+        self.init(.sRGB, red: r, green: g, blue: b, opacity: opacity)
+    }
+}
+
+struct DesignCanvas: ViewModifier {
+    var isPad: Bool
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(SaycribeColor.bg.ignoresSafeArea())
+            .environment(\.designIsPad, isPad)
+            .preferredColorScheme(.dark)
+    }
+}
+
+private struct DesignIsPadKey: EnvironmentKey {
+    static let defaultValue = false
+}
+extension EnvironmentValues {
+    var designIsPad: Bool {
+        get { self[DesignIsPadKey.self] }
+        set { self[DesignIsPadKey.self] = newValue }
+    }
+}
+
+extension View {
+    func designCanvas(isPad: Bool) -> some View { modifier(DesignCanvas(isPad: isPad)) }
+}
+import SwiftUI
+
+/// 动效弹簧参数：来自牙膏哥指定的品牌规范。spring(response:dampingFraction:)
+enum Motion {
+    /// 弹出、徽标，明显回弹
+    static let pop = Animation.spring(response: 0.42, dampingFraction: 0.58)
+    /// 页面和卡片展开
+    static let smooth = Animation.spring(response: 0.50, dampingFraction: 0.86)
+    /// 形变、切换
+    static let morph = Animation.spring(response: 0.34, dampingFraction: 0.74)
+    /// 弹窗、面板进场
+    static let window = Animation.spring(response: 0.40, dampingFraction: 0.62)
+    /// 聚焦、几乎不回弹
+    static let focus = Animation.spring(response: 0.70, dampingFraction: 0.96)
+    /// 灵动岛形变（过冲约 1.095）
+    static let island = Animation.spring(response: 0.52, dampingFraction: 0.60)
+    /// Live Activity：spring(duration: 0.6, bounce: 0.32)
+    static let liveActivity = Animation.spring(duration: 0.6, bounce: 0.32)
+
+    static let exit = Animation.timingCurve(0.5, 0, 0.75, 0, duration: 0.42)
+    static let fade = Animation.timingCurve(0, 0, 0.58, 1, duration: 0.18)
+    /// 按钮按下
+    static let press = Animation.easeOut(duration: 0.15)
+    /// 滚动顶栏收起
+    static let scrollCollapse = Animation.easeOut(duration: 0.26)
+    /// 键盘跟随
+    static let keyboardFollow = Animation.easeOut(duration: 0.25)
+}
+
+/// 按钮按下缩放到约 0.96，easeOut 0.15s（来自牙膏哥指定的品牌规范）
+struct PressScaleStyle: ButtonStyle {
+    var scale: CGFloat = 0.96
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? scale : 1)
+            .animation(Motion.press, value: configuration.isPressed)
+    }
+}
+
+/// 列表/卡片进出场：scale + opacity
+struct AppearScaleOpacity: ViewModifier {
+    var shown: Bool
+    var scaleFrom: CGFloat = 0.92
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            .scaleEffect(shown ? 1 : scaleFrom)
+    }
+}
+
+extension View {
+    func appearScaleOpacity(_ shown: Bool, from: CGFloat = 0.92) -> some View {
+        modifier(AppearScaleOpacity(shown: shown, scaleFrom: from))
+            .animation(Motion.smooth, value: shown)
+    }
+}
+import SwiftUI
+
+@main
+struct DesignExportApp: App {
+    /// -designMode motion|page|export
+    private var mode: String {
+        if let i = ProcessInfo.processInfo.arguments.firstIndex(of: "-designMode"),
+           i + 1 < ProcessInfo.processInfo.arguments.count {
+            return ProcessInfo.processInfo.arguments[i + 1]
+        }
+        return UserDefaults.standard.string(forKey: "designMode") ?? "motion"
+    }
+
+    var body: some Scene {
+        WindowGroup {
+            Group {
+                if mode == "motion" || mode == "page" {
+                    MotionShowcaseRoot()
+                } else {
+                    ExportHost()
+                }
+            }
+            .preferredColorScheme(.dark)
+        }
+    }
+}
+
+struct ExportHost: View {
+    @State private var status = "准备导出设计稿…"
+    @State private var done = false
+
+    var body: some View {
+        ZStack {
+            SaycribeColor.bg.ignoresSafeArea()
+            VStack(spacing: 16) {
+                AppLogoMark(size: 56)
+                Text("Saycribe 设计稿导出")
+                    .font(SaycribeFont.title(22))
+                    .foregroundStyle(SaycribeColor.textPrimary)
+                Text(status)
+                    .font(SaycribeFont.body(14))
+                    .foregroundStyle(SaycribeColor.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                if done {
+                    Text("可以关掉模拟器了")
+                        .font(SaycribeFont.medium(14))
+                        .foregroundStyle(SaycribeColor.success)
+                }
+            }
+        }
+        .task { await exportAll() }
+    }
+
+    @MainActor
+    private func exportAll() async {
+        let fm = FileManager.default
+        let docs = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let root = docs.appendingPathComponent("设计稿", isDirectory: true)
+        let phoneDir = root.appendingPathComponent("iPhone", isDirectory: true)
+        let padDir = root.appendingPathComponent("iPad", isDirectory: true)
+        try? fm.createDirectory(at: phoneDir, withIntermediateDirectories: true)
+        try? fm.createDirectory(at: padDir, withIntermediateDirectories: true)
+
+        let phone = CGSize(width: 393, height: 852)
+        let pad = CGSize(width: 834, height: 1194)
+
+        let jobs: [(String, AnyView, AnyView)] = [
+            ("01-隐私说明",
+             AnyView(PrivacyScreen().environment(\.designIsPad, false)),
+             AnyView(PrivacyScreen().environment(\.designIsPad, true))),
+            ("02-麦克风权限预热",
+             AnyView(MicPermissionScreen().environment(\.designIsPad, false)),
+             AnyView(MicPermissionScreen().environment(\.designIsPad, true))),
+            ("03-添加键盘",
+             AnyView(AddKeyboardScreen().environment(\.designIsPad, false)),
+             AnyView(AddKeyboardScreen().environment(\.designIsPad, true))),
+            ("04-互动演示-录音中",
+             AnyView(DemoScreen(phase: "recording").environment(\.designIsPad, false)),
+             AnyView(DemoScreen(phase: "recording").environment(\.designIsPad, true))),
+            ("04b-互动演示-结果",
+             AnyView(DemoScreen(phase: "result").environment(\.designIsPad, false)),
+             AnyView(DemoScreen(phase: "result").environment(\.designIsPad, true))),
+            ("05-键盘布局",
+             AnyView(KeyboardLayoutScreen().environment(\.designIsPad, false)),
+             AnyView(KeyboardLayoutScreen().environment(\.designIsPad, true))),
+            ("06-键盘内引导卡",
+             AnyView(KeyboardGuideScreen(page: 0).environment(\.designIsPad, false)),
+             AnyView(KeyboardGuideScreen(page: 0).environment(\.designIsPad, true))),
+            ("06b-键盘内引导卡-帮我写",
+             AnyView(KeyboardGuideScreen(page: 1).environment(\.designIsPad, false)),
+             AnyView(KeyboardGuideScreen(page: 1).environment(\.designIsPad, true))),
+            ("07-首页统计",
+             AnyView(HomeStatsScreen().environment(\.designIsPad, false)),
+             AnyView(HomeStatsScreen().environment(\.designIsPad, true))),
+            ("08-历史",
+             AnyView(HistoryScreen().environment(\.designIsPad, false)),
+             AnyView(HistoryScreen().environment(\.designIsPad, true))),
+            ("09-词库",
+             AnyView(LexiconScreen().environment(\.designIsPad, false)),
+             AnyView(LexiconScreen().environment(\.designIsPad, true))),
+            ("10-设置",
+             AnyView(DesignSettingsScreen().environment(\.designIsPad, false)),
+             AnyView(DesignSettingsScreen().environment(\.designIsPad, true))),
+        ]
+
+        var ok = 0
+        for (name, phoneView, padView) in jobs {
+            status = "导出 \(name)…"
+            if render(phoneView, size: phone, to: phoneDir.appendingPathComponent("\(name).png")) { ok += 1 }
+            if render(padView, size: pad, to: padDir.appendingPathComponent("\(name).png")) { ok += 1 }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+
+        let marker = root.appendingPathComponent("_export_done.txt")
+        try? "exported=\(ok)\nroot=\(root.path)\n".write(to: marker, atomically: true, encoding: .utf8)
+        status = "已导出 \(ok) 张到 Documents/设计稿/"
+        done = true
+        print("[DesignExport] done count=\(ok) path=\(root.path)")
+    }
+
+    @MainActor
+    private func render<V: View>(_ view: V, size: CGSize, to url: URL) -> Bool {
+        let content = view
+            .frame(width: size.width, height: size.height)
+            .environment(\.colorScheme, .dark)
+        let renderer = ImageRenderer(content: content)
+        renderer.scale = 2.0
+        renderer.proposedSize = ProposedViewSize(width: size.width, height: size.height)
+        guard let image = renderer.uiImage, let data = image.pngData() else {
+            print("[DesignExport] FAIL \(url.lastPathComponent)")
+            return false
+        }
+        do {
+            try data.write(to: url, options: .atomic)
+            print("[DesignExport] OK \(url.lastPathComponent) \(data.count)B")
+            return true
+        } catch {
+            print("[DesignExport] WRITE \(error)")
+            return false
+        }
+    }
+}
+
+exec
+/bin/zsh -lc "rg -n 'Saycribe|随口|suikou' /Users/zjh/ecom-agent-memory/0-主页/库里有什么.md; rg --files /Users/zjh/ecom-agent-memory | rg '随口|Saycribe|saycribe|suikou' | head -35; rg --files . | head -55; xcrun --sdk iphonesimulator --show-sdk-path; xcrun simctl list devices booted" in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 164ms:
+/Users/zjh/ecom-agent-memory/本地听写翻译/工作记录/Saycribe商店上架只读审查.2026-10-28-1302.md
+/Users/zjh/ecom-agent-memory/本地听写翻译/工作记录/Saycribe商店候选整改与系统服务验收.2026-10-28-1405.md
+/Users/zjh/ecom-agent-memory/零散记录/工作记录/Saycribe 加会议同传（中文说话→会议里英文语音）.2026-10-23-1111.md
+/Users/zjh/ecom-agent-memory/零散记录/工作记录/修复 Saycribe 按快捷键就闪退.2026-10-24-0816.md
+./DesignPreview/Info.plist
+./DesignPreview/DesignTokens.swift
+./DesignPreview/Components/SharedChrome.swift
+./DesignPreview/Screens/DemoScreen.swift
+./DesignPreview/Screens/KeyboardGuideScreen.swift
+./DesignPreview/Screens/MicPermissionScreen.swift
+./DesignPreview/Screens/AddKeyboardScreen.swift
+./DesignPreview/Screens/PrivacyScreen.swift
+./DesignPreview/Screens/KeyboardLayoutScreen.swift
+./DesignPreview/Screens/MainAppScreens.swift
+./DesignPreview/Motion/MotionShowcase.swift
+./DesignPreview/Motion/Motion.swift
+./DesignPreview/DesignExportApp.swift
+./设计稿/第七版-Codex动效/iPhone/空闲.png
+./设计稿/第七版-Codex动效/iPhone/录屏-音量波动-小.mp4
+./设计稿/第七版-Codex动效/iPhone/帧/f_005.png
+./设计稿/第七版-Codex动效/iPhone/帧/f_006.png
+./设计稿/第七版-Codex动效/iPhone/帧/f_012.png
+./设计稿/第七版-Codex动效/iPhone/帧/f_001.png
+./设计稿/第七版-Codex动效/iPhone/帧/f_025.png
+./设计稿/第七版-Codex动效/iPhone/帧/f_018.png
+./设计稿/第七版-Codex动效/iPhone/帧/f_008.png
+./设计稿/第七版-Codex动效/iPhone/录屏-音量波动.mp4
+./设计稿/第七版-Codex动效/iPhone/录音中-大声.png
+./设计稿/说明.md
+./设计稿/第三版-已否/iPhone/录屏-动效演示.mp4
+./设计稿/第三版-已否/iPhone/01-隐私说明.png
+./设计稿/第三版-已否/iPhone/05-键盘布局.png
+./设计稿/第三版-已否/iPhone/04-录音中.png
+./设计稿/第五版-全橙按钮/iPhone/空闲-主按钮.png
+./设计稿/第五版-全橙按钮/iPhone/05-键盘布局.png
+./设计稿/第五版-全橙按钮/iPhone/录屏-空闲到录音.mp4
+./设计稿/第二版-深色橙/iPhone/录屏-动效演示.mp4
+./设计稿/第二版-深色橙/iPhone/01-隐私说明.png
+./设计稿/第二版-深色橙/iPhone/05-键盘布局.png
+./设计稿/第二版-深色橙/iPhone/04-录音中.png
+./设计稿/第六版-自有元素/iPhone/空闲.png
+./设计稿/第六版-自有元素/iPhone/录屏-音量波动-小.mp4
+./设计稿/第六版-自有元素/iPhone/05-键盘布局.png
+./设计稿/第六版-自有元素/iPhone/录屏-音量波动.mp4
+./设计稿/第六版-自有元素/iPhone/录音中-大声.png
+./设计稿/第一版-已否/iPad/06-键盘内引导卡.png
+./设计稿/第一版-已否/iPad/04b-互动演示-结果.png
+./设计稿/第一版-已否/iPad/09-词库.png
+./设计稿/第一版-已否/iPad/01-隐私说明.png
+./设计稿/第一版-已否/iPad/02-麦克风权限预热.png
+./设计稿/第一版-已否/iPad/08-历史.png
+./设计稿/第一版-已否/iPad/06b-键盘内引导卡-帮我写.png
+./设计稿/第一版-已否/iPad/10-设置.png
+./设计稿/第一版-已否/iPad/07-首页统计.png
+./设计稿/第一版-已否/iPad/05-键盘布局.png
+./设计稿/第一版-已否/iPad/03-添加键盘.png
+./设计稿/第一版-已否/iPad/04-互动演示-录音中.png
+./设计稿/第一版-已否/iPhone/06-键盘内引导卡.png
+./设计稿/第一版-已否/iPhone/04b-互动演示-结果.png
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.2.sdk
+== Devices ==
+-- iOS 26.2 --
+    Saycribe-iPhone17Pro (4E592401-906B-43E2-B81F-607550484C22) (Booted) 
+
+exec
+/bin/zsh -lc "cat /Users/zjh/ecom-agent-memory/本地听写翻译/现在做到哪.md; ls -t /Users/zjh/ecom-agent-memory/本地听写翻译/工作记录 | head -3; rg -n 'xcrun|swiftc|DesignPreview|SaycribeDesign' . ../../scripts ../../docs -g '*.sh' -g '*.md' -g '*.py' -g '*.yml'" in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 0ms:
+# 本地听写翻译现在做到哪
+
+2026-10-28 商店整改：独立候选 `/Users/zjh/Applications/Saycribe Store.app` 已安装（0.2.0，Sandbox，约259MiB）。源码 `/Users/zjh/Documents/Codex/2026-10-28/typeless-appstor/saycribe`，本地代码提交79988fa。Keychain、明确云端同意/默认离线/撤回、no-tts依赖及许可、Xcode开发归档已实施；7项隐私测试通过。TextEdit通过系统Services实际接收听写结果，取消保持原文。原按键自动粘贴未验通，商店候选改用服务入口自动返回，组合键只复制；会议同传仍仅原自用版保留。尚未提交，正式签名/公开网页/商店资料及其他App兼容待办。详见 [本轮交付记录](工作记录/Saycribe商店候选整改与系统服务验收.2026-10-28-1405.md)。原自用版与原仓库未覆盖。
+
+2026-10-28：本轮确认当前实际使用的是 **Saycribe**，代码 `/Users/zjh/claude-workdir/suikou`，安装包 `/Users/zjh/Applications/Saycribe.app`（0.1.0，arm64，macOS 14+）；下文 LocalVoice/3060 是历史版本记录。已做 App Store 上架只读审查，未实施改造、未上传。主要待办：Sandbox 核心跨 App 交互验证；当前 sherpa 动态库的 eSpeak/GPL 处理；DeepSeek 明确同意与隐私说明；商店签名打包。当前 UI 显示缺 BlackHole，同传端到端未测。详见 [本轮审查记录](工作记录/Saycribe商店上架只读审查.2026-10-28-1302.md)。
+
+2026-10-07 17:28：3060 听写服务已按膏哥要求用 `D:\local-voice\app\win-stop.ps1` 停掉，18765 不再监听。Bonsai 没动。要恢复听写再跑同目录的 `win-start.ps1`。
+
+2026-10-02：本地听写的卡片在按住时就会把 3060 认出的字写上去，玻璃改成更透的 popover，光效按音量起伏、不再一开口就顶满。还没有一句真人说话核对出字和粘贴。
+
+- 听写包：`/Users/zjh/local-voice/mac-dictate/LocalVoiceDictate.app`。签名 Apple Development: 553017136@qq.com (A3C7HQX92L)，identifier `local.voice.dictate`。按住键盘右边的 Option 超过 0.3 秒才录音，松开后走 3060 识别并粘贴。左边 Option 和 Fn 不触发。
+- 卡片：420×280，鼠标所在屏幕底部居中。毛玻璃是 NSVisualEffectView，材质 `.popover`。光效页面是单个内联 `voice-card/index.html`，没有 `type=module`。没有 Agent 芯片。电平是 `LevelMap`：`(rms - 0.006) / 0.09`，不再用 RMS×30。按住满约 0.9 秒后，用现有 `/v1/asr` 把已说出的字刷新到卡片上，不粘贴、不写记录；松开后的整段才粘贴。还没有一句真人说话核对过。
+- 截图翻译没在这轮改。英文名仍未选定，显示名仍是 Translate。
+- 没改 server.py，没动防火墙，没 ssh 3060，没提交 git。
+Saycribe商店候选整改与系统服务验收.2026-10-28-1405.md
+Saycribe商店上架只读审查.2026-10-28-1302.md
+Translate 图标换成无文字抽象风格.2026-10-22-0719.md
+./设计稿/说明.md:24:### 动效（`DesignPreview/Motion/Motion.swift`，来自牙膏哥指定的品牌规范）
+./设计稿/说明.md:66:### 配色 token（DesignPreview/DesignTokens.swift，来自牙膏哥指定的品牌规范）
+./设计稿/说明.md:84:- 拍摄用 Saycribe 专用干净模拟器 `Saycribe-iPhone17Pro`（只装 DesignPreview），App 前台稳定后才开录，先停录再退出 App。
+./设计稿/说明.md:99:- `AudioLevelSource` 协议，输入 0…1。真实 App 接录音 RMS；DesignPreview 用 `SimulatedAudioLevel`：0–3.5s 大声（0.72–0.98），3.5–6.5s 小声（0.18–0.32），6.5–9s 停顿（≤0.02），9s 起再大声；抖动 = sin(9.1t)·sin(3.7t+1.3)；起音 0.25s 线性爬升。
+./设计稿/说明.md:127:说话态动效由本机 Codex CLI（ChatGPT App 自带 `0.165.0-alpha`，`-m gpt-6.1-sol`）重做；只改了 `DesignPreview/Motion/MotionShowcase.swift` 里的 `VoiceOrb` / `LevelBars`。第六版已有差异（中英胶囊、自有文案、悬浮岛、进度弧、状态标签）全部保留。
+./测试报告/2026-10-30-模拟器识别与单测.md:72:4. DesignPreview 与其它 bot 共用 Mac：继续用 `/tmp/saycribe-ios-heavy.lock` + `uptime` load&lt;10。
+./project.yml:119:  DesignPreview:
+./project.yml:122:    sources: [DesignPreview]
+./project.yml:124:      path: DesignPreview/Info.plist
+./project.yml:126:        CFBundleDisplayName: SaycribeDesign
+./project.yml:140:  DesignPreview:
+./project.yml:142:      targets: {DesignPreview: all}
+
+exec
+/bin/zsh -lc "cat DesignPreview/Info.plist; rg -n -A65 'struct AppLogoMark' DesignPreview/Components/SharedChrome.swift; ls -la; xcrun simctl listapps booted" in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 128ms:
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>SaycribeDesign</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+	</array>
+</dict>
+</plist>
+160:struct AppLogoMark: View {
+161-    var size: CGFloat = 28
+162-    var body: some View {
+163-        ZStack {
+164-            RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+165-                .fill(SaycribeColor.orange)
+166-                .frame(width: size, height: size)
+167-                .shadow(color: SaycribeColor.orange.opacity(0.35), radius: size * 0.2, y: 2)
+168-            Image(systemName: "waveform")
+169-                .font(.system(size: size * 0.42, weight: .bold))
+170-                .foregroundStyle(SaycribeColor.onBright)
+171-        }
+172-    }
+173-}
+174-
+175-struct TabBarMock: View {
+176-    var selected: Int
+177-    private let items: [(String, String)] = [
+178-        ("chart.bar.fill", "首页"),
+179-        ("clock", "历史"),
+180-        ("text.book.closed", "词库"),
+181-        ("gearshape", "设置"),
+182-    ]
+183-    var body: some View {
+184-        HStack {
+185-            ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
+186-                VStack(spacing: 4) {
+187-                    Image(systemName: item.0)
+188-                        .font(.system(size: 20, weight: .semibold))
+189-                    Text(item.1).font(SaycribeType.overline)
+190-                }
+191-                .foregroundStyle(idx == selected ? SaycribeColor.orange : SaycribeColor.textTertiary)
+192-                .frame(maxWidth: .infinity)
+193-            }
+194-        }
+195-        .padding(.top, 10)
+196-        .padding(.bottom, 22)
+197-        .background(SaycribeColor.card.opacity(0.96))
+198-        .overlay(alignment: .top) {
+199-            Rectangle().fill(SaycribeColor.border).frame(height: 1)
+200-        }
+201-    }
+202-}
+203-
+204-/// 深色卡片底板：细描边 + 轻微材质感
+205-struct DarkCardBackground: View {
+206-    var radius: CGFloat = SaycribeRadius.xl
+207-    var body: some View {
+208-        RoundedRectangle(cornerRadius: radius, style: .continuous)
+209-            .fill(SaycribeColor.card)
+210-            .overlay(
+211-                RoundedRectangle(cornerRadius: radius, style: .continuous)
+212-                    .stroke(SaycribeColor.border, lineWidth: 1)
+213-            )
+214-    }
+215-}
+216-
+217-/// 自有语言切换键：圆角胶囊「中英」（替代系统地球图标）
+218-struct LangSwitchChip: View {
+219-    var body: some View {
+220-        Text("中英")
+221-            .font(.system(size: 11, weight: .medium, design: .monospaced))
+222-            .foregroundStyle(SaycribeColor.textSecondary)
+223-            .padding(.horizontal, 8).frame(height: 22)
+224-            .background(Capsule().fill(SaycribeColor.card))
+225-            .overlay(Capsule().stroke(SaycribeColor.borderStrong, lineWidth: 1))
+total 32
+drwxr-xr-x@ 17 zjh  staff   544 Oct 30 21:57 .
+drwxr-xr-x@  8 zjh  staff   256 Oct 30 19:00 ..
+-rw-r--r--@  1 zjh  staff   101 Oct 30 18:52 .gitignore
+-rw-------@  1 zjh  staff   295 Oct 30 17:52 .relay-tokens.env
+drwxr-xr-x@  8 zjh  staff   256 Oct 30 19:00 DesignPreview
+drwxr-xr-x@  5 zjh  staff   160 Oct 30 19:16 Saycribe.xcodeproj
+drwxr-xr-x@  9 zjh  staff   288 Oct 30 18:52 SaycribeApp
+drwxr-xr-x@  4 zjh  staff   128 Oct 30 19:10 SaycribeAppTests
+drwxr-xr-x@ 12 zjh  staff   384 Oct 30 18:52 SaycribeCore
+drwxr-xr-x@  5 zjh  staff   160 Oct 30 18:52 SaycribeCoreTests
+drwxr-xr-x@  5 zjh  staff   160 Oct 30 17:55 SaycribeKeyboard
+drwxr-xr-x@  4 zjh  staff   128 Oct 30 19:12 Vendor
+-rw-r--r--@  1 zjh  staff  5223 Oct 30 18:52 project.yml
+drwxr-xr-x@  3 zjh  staff    96 Oct 30 18:52 scripts
+drwxr-xr-x@  3 zjh  staff    96 Oct 30 19:17 测试报告
+drwxr-xr-x@ 11 zjh  staff   352 Oct 30 23:09 设计稿
+drwxr-xr-x@  4 zjh  staff   128 Oct 30 23:12 调研资料
+{
+    "com.apple.Bridge" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Bridge.app/";
+        CFBundleDisplayName = Watch;
+        CFBundleExecutable = Bridge;
+        CFBundleIdentifier = "com.apple.Bridge";
+        CFBundleName = Watch;
+        CFBundleVersion = "1.0";
+        DataContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Data/Application/F81E7B36-9B75-474C-93A0-838933A33FB3/";
+        GroupContainers =         {
+            "243LU875E5.groups.com.apple.podcasts" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/7E71119E-10FF-44E3-8664-376A05CC0DBD/";
+            "group.com.apple.bridge" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/B3A76AD1-A4E3-4D13-B4F8-514DDE93144E/";
+            "group.com.apple.iBooks" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/1BB0935B-17DA-403A-A3D8-CC9504DBE70E/";
+            "group.com.apple.mail" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/6355C798-590D-4FED-AF05-AD75B10AE622/";
+            "group.com.apple.stocks" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/FC69819E-AD8D-41E5-BC7E-477F328CD893/";
+            "group.com.apple.weather" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/04C3898A-7B50-4FCE-80DF-9424B0F3A1DB/";
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Bridge.app";
+        SBAppTags =         (
+            "watch-companion"
+        );
+    };
+    "com.apple.DocumentsApp" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Files.app/";
+        CFBundleDisplayName = Files;
+        CFBundleExecutable = Files;
+        CFBundleIdentifier = "com.apple.DocumentsApp";
+        CFBundleName = Files;
+        CFBundleVersion = "367.2.4";
+        DataContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Data/Application/FFF93261-5A4A-434F-AAF6-8B7A06D21CFD/";
+        GroupContainers =         {
+            "group.com.apple.DocumentManager" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/2462024D-B9FD-423C-BB72-35139895E7F9/";
+            "group.com.apple.FileProvider.LocalStorage" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/0C54D120-EB53-4756-A401-18D43A3F4CC8/";
+            "group.com.apple.tipsnext" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/BB4D6A50-0735-4B0C-80D1-953B1F1AC93F/";
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Files.app";
+        SBAppTags =         (
+        );
+    };
+    "com.apple.Fitness" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Fitness.app/";
+        CFBundleDisplayName = Fitness;
+        CFBundleExecutable = Fitness;
+        CFBundleIdentifier = "com.apple.Fitness";
+        CFBundleName = Fitness;
+        CFBundleVersion = "1.0";
+        DataContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Data/Application/9554447A-FF5F-4C54-972B-4DC018684605/";
+        GroupContainers =         {
+            "group.com.apple.Fitness" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/FAA99CF0-8296-44ED-A43C-C90E7ABCC78A/";
+            "group.com.apple.weather" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/04C3898A-7B50-4FCE-80DF-9424B0F3A1DB/";
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Fitness.app";
+        SBAppTags =         (
+        );
+    };
+    "com.apple.Health" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Health.app/";
+        CFBundleDisplayName = Health;
+        CFBundleExecutable = Health;
+        CFBundleIdentifier = "com.apple.Health";
+        CFBundleName = Health;
+        CFBundleVersion = "6200.3.10.2.1";
+        DataContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Data/Application/E60CA35E-5966-44FA-AB50-CD844D65F2A8/";
+        GroupContainers =         {
+            "group.com.apple.Health" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/7A5CE7B1-F807-42BA-9DB0-5DEFA95A6A2C/";
+            "group.com.apple.ip.redirects" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/5CFC1A84-5F12-429F-BEFD-F87A0AB0ADEC/";
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Health.app";
+        SBAppTags =         (
+        );
+    };
+    "com.apple.Maps" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Maps.app/";
+        CFBundleDisplayName = Maps;
+        CFBundleExecutable = Maps;
+        CFBundleIdentifier = "com.apple.Maps";
+        CFBundleName = Maps;
+        CFBundleVersion = "2911.32.10.2.15";
+        DataContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Data/Application/49871A4B-9C64-4E31-BA66-B171BBF9A64F/";
+        GroupContainers =         {
+            "group.com.apple.Maps" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/DB2860E6-BAFD-40A8-9BF5-3A71B9A3B39C/";
+            "group.com.apple.weather.internal" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/CEC8D280-9EAB-410E-ACF4-F27A9280FE4E/";
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Maps.app";
+        SBAppTags =         (
+        );
+    };
+    "com.apple.MobileAddressBook" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Contacts.app/";
+        CFBundleDisplayName = Contacts;
+        CFBundleExecutable = Contacts;
+        CFBundleIdentifier = "com.apple.MobileAddressBook";
+        CFBundleName = Contacts;
+        CFBundleVersion = "1.0";
+        DataContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Data/Application/4D7BD0D0-59DD-45F9-8611-32360CF44FED/";
+        GroupContainers =         {
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Contacts.app";
+        SBAppTags =         (
+            "stand-alone-contacts"
+        );
+    };
+    "com.apple.MobileSMS" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/MobileSMS.app/";
+        CFBundleDisplayName = Messages;
+        CFBundleExecutable = MobileSMS;
+        CFBundleIdentifier = "com.apple.MobileSMS";
+        CFBundleName = MobileSMS;
+        CFBundleVersion = "1450.300.41.2.7";
+        DataContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Data/Application/A5D4BE40-904E-4989-9BCF-0475216FA480/";
+        GroupContainers =         {
+            "group.com.apple.PegasusConfiguration" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/B2765188-B755-4D21-B6B6-A9C7DFB2955A/";
+            "group.com.apple.hashtagImages" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/2EE7A8A5-BA70-469A-91B4-5F7321856B9A/";
+            "group.com.apple.mobileslideshow.PhotosFileProvider" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/8316BA47-9614-4188-A2A9-090172B47820/";
+            "group.com.apple.safari" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/CB378C5E-51BF-4E86-A94B-186EADE25DDD/";
+            "group.com.apple.tipsnext" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/BB4D6A50-0735-4B0C-80D1-953B1F1AC93F/";
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/MobileSMS.app";
+        SBAppTags =         (
+        );
+    };
+    "com.apple.Passbook" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Passbook.app/";
+        CFBundleDisplayName = Wallet;
+        CFBundleExecutable = Passbook;
+        CFBundleIdentifier = "com.apple.Passbook";
+        CFBundleName = Wallet;
+        CFBundleVersion = "1642.3.5";
+        DataContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Data/Application/D1E3D33B-A917-40BD-AFF6-D5E175D49932/";
+        GroupContainers =         {
+            "com.apple.CoreODI" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/77C0E682-5471-460F-AD37-612174DDEF99/";
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Passbook.app";
+        SBAppTags =         (
+        );
+    };
+    "com.apple.Passwords" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Passwords.app/";
+        CFBundleDisplayName = Passwords;
+        CFBundleExecutable = Passwords;
+        CFBundleIdentifier = "com.apple.Passwords";
+        CFBundleName = Passwords;
+        CFBundleVersion = "8623.1.14.10.9";
+        DataContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Data/Application/3C470AFD-6990-4435-89E0-8C6971C9FAF8/";
+        GroupContainers =         {
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Passwords.app";
+        SBAppTags =         (
+        );
+    };
+    "com.apple.Posters.KaleidoscopePosterApp" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/KaleidoscopePosterApp.app/";
+        CFBundleDisplayName = Kaleidoscope;
+        CFBundleExecutable = KaleidoscopePosterApp;
+        CFBundleIdentifier = "com.apple.Posters.KaleidoscopePosterApp";
+        CFBundleName = KaleidoscopePosterApp;
+        CFBundleVersion = 1;
+        GroupContainers =         {
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/KaleidoscopePosterApp.app";
+        SBAppTags =         (
+        );
+    };
+    "com.apple.Posters.UnityPosterApp" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/UnityPosterApp.app/";
+        CFBundleDisplayName = Unity;
+        CFBundleExecutable = UnityPosterApp;
+        CFBundleIdentifier = "com.apple.Posters.UnityPosterApp";
+        CFBundleName = UnityPosterApp;
+        CFBundleVersion = 1;
+        GroupContainers =         {
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/UnityPosterApp.app";
+        SBAppTags =         (
+        );
+    };
+    "com.apple.Preferences" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Preferences.app/";
+        CFBundleDisplayName = Settings;
+        CFBundleExecutable = Preferences;
+        CFBundleIdentifier = "com.apple.Preferences";
+        CFBundleName = Settings;
+        CFBundleVersion = "1353.2.7";
+        GroupContainers =         {
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Preferences.app";
+        SBAppTags =         (
+        );
+    };
+    "com.apple.Preview" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Preview.app/";
+        CFBundleDisplayName = Preview;
+        CFBundleExecutable = Preview;
+        CFBundleIdentifier = "com.apple.Preview";
+        CFBundleName = Preview;
+        CFBundleVersion = "1016.203.1";
+        DataContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Data/Application/DF7DF36B-CCBD-4912-B987-4FAEE9311C00/";
+        GroupContainers =         {
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Preview.app";
+        SBAppTags =         (
+        );
+    };
+    "com.apple.PreviewShell" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/PreviewShell.app/";
+        CFBundleDisplayName = "Xcode Previews";
+        CFBundleExecutable = PreviewShell;
+        CFBundleIdentifier = "com.apple.PreviewShell";
+        CFBundleName = "Xcode Previews";
+        CFBundleVersion = "23.20.6";
+        DataContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Data/Application/F191FAD5-2B4B-4667-A053-751FD408AFD1/";
+        GroupContainers =         {
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/PreviewShell.app";
+        SBAppTags =         (
+        );
+    };
+    "com.apple.PridePoster" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/PridePosterApp.app/";
+        CFBundleDisplayName = Pride;
+        CFBundleExecutable = PridePosterApp;
+        CFBundleIdentifier = "com.apple.PridePoster";
+        CFBundleName = PridePosterApp;
+        CFBundleVersion = 1;
+        GroupContainers =         {
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/PridePosterApp.app";
+        SBAppTags =         (
+        );
+    };
+    "com.apple.mobilecal" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/MobileCal.app/";
+        CFBundleDisplayName = Calendar;
+        CFBundleExecutable = MobileCal;
+        CFBundleIdentifier = "com.apple.mobilecal";
+        CFBundleName = MobileCal;
+        CFBundleVersion = 1;
+        DataContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Data/Application/45EC0CD6-66FA-4F37-B003-8CA1334AEFE9/";
+        GroupContainers =         {
+            "group.com.apple.reminders" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/DD44C11F-73BC-4ACA-87E5-57436E1AC80F/";
+            "group.com.apple.tipsnext" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/BB4D6A50-0735-4B0C-80D1-953B1F1AC93F/";
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/MobileCal.app";
+        SBAppTags =         (
+        );
+    };
+    "com.apple.mobilesafari" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/MobileSafari.app/";
+        CFBundleDisplayName = Safari;
+        CFBundleExecutable = MobileSafari;
+        CFBundleIdentifier = "com.apple.mobilesafari";
+        CFBundleName = MobileSafari;
+        CFBundleVersion = "8623.1.14.10.9";
+        DataContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Data/Application/5647A965-BB5C-4D4A-9BCF-A95141CE7EA6/";
+        GroupContainers =         {
+            "group.com.apple.BrowserKit" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/B2A2D88F-85DF-455F-BD7D-CAE9A838653C/";
+            "group.com.apple.sports" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/A30360E0-38D9-4AE6-B62F-066C7CAC55F1/";
+            "group.com.apple.tipsnext" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/BB4D6A50-0735-4B0C-80D1-953B1F1AC93F/";
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/MobileSafari.app";
+        SBAppTags =         (
+        );
+    };
+    "com.apple.mobileslideshow" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Photos.app/";
+        CFBundleDisplayName = Photos;
+        CFBundleExecutable = Photos;
+        CFBundleIdentifier = "com.apple.mobileslideshow";
+        CFBundleName = Photos;
+        CFBundleVersion = "822.0.130";
+        GroupContainers =         {
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Photos.app";
+        SBAppTags =         (
+        );
+    };
+    "com.apple.news" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/News.app/";
+        CFBundleDisplayName = News;
+        CFBundleExecutable = News;
+        CFBundleIdentifier = "com.apple.news";
+        CFBundleName = News;
+        CFBundleVersion = "5789.2";
+        DataContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Data/Application/6AF00085-95A5-41FF-B4A8-D736829F7FDF/";
+        GroupContainers =         {
+            "group.com.apple.news" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/BAD86541-66A3-4C48-A503-AEB299C8F646/";
+            "group.com.apple.newsd" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/AE38FEAD-2483-45D6-A51D-726C3445D2D0/";
+            "group.com.apple.stocks-news" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/2C9832CC-FA7E-4667-8809-25AA0AED610F/";
+            "group.com.apple.weather" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/04C3898A-7B50-4FCE-80DF-9424B0F3A1DB/";
+            "group.tvappservices.container" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/D3C13C4A-D8CD-4F43-8DAE-15A70AF0D2A7/";
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/News.app";
+        SBAppTags =         (
+        );
+    };
+    "com.apple.reminders" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Reminders.app/";
+        CFBundleDisplayName = Reminders;
+        CFBundleExecutable = Reminders;
+        CFBundleIdentifier = "com.apple.reminders";
+        CFBundleName = Reminders;
+        CFBundleVersion = "3856.14";
+        DataContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Data/Application/F68B5F88-1039-4E71-AFFF-C625BC6758B6/";
+        GroupContainers =         {
+            "group.com.apple.reminders" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/DD44C11F-73BC-4ACA-87E5-57436E1AC80F/";
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Reminders.app";
+        SBAppTags =         (
+        );
+    };
+    "com.apple.shortcuts" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Shortcuts.app/";
+        CFBundleDisplayName = Shortcuts;
+        CFBundleExecutable = Shortcuts;
+        CFBundleIdentifier = "com.apple.shortcuts";
+        CFBundleName = Shortcuts;
+        CFBundleVersion = "4046.0.2.1.102";
+        DataContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Data/Application/67E97EB0-C517-4E10-8D57-45C9C987C814/";
+        GroupContainers =         {
+            "group.com.apple.shortcuts" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/C320CCA3-1AE6-4AED-8203-BC52C2C79228/";
+            "group.com.apple.tipsnext" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/BB4D6A50-0735-4B0C-80D1-953B1F1AC93F/";
+            "group.is.workflow.my.app" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/12D50562-ED68-4D8F-B292-B7ED1D783205/";
+            "group.is.workflow.shortcuts" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/1FAB8098-453C-42E4-B430-EC526E7F9C67/";
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Shortcuts.app";
+        SBAppTags =         (
+        );
+    };
+    "com.apple.webapp" =     {
+        ApplicationType = System;
+        Bundle = "file:///Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2026.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Web.app/";
+        CFBundleDisplayName = Web;
+        CFBundleExecutable = Web;
+        CFBundleIdentifier = "com.apple.webapp";
+        CFBundleName = Web;
+        CFBundleVersion = "8623.1.14.10.9";
+        DataContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Data/Application/46F19978-BD5C-4614-A0C4-3BA9B7B5D13C/";
+        GroupContainers =         {
+        };
+        Path = "/Library/Developer/CoreSimulator/Volumes/iOS_23C54/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.2.simruntime/Contents/Resources/RuntimeRoot/Applications/Web.app";
+        SBAppTags =         (
+        );
+    };
+    "com.motomotos.saycribe.designpreview" =     {
+        ApplicationType = User;
+        Bundle = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Bundle/Application/FC7A1D19-EBD9-4EE0-B7B5-1537C85BD204/DesignPreview.app/";
+        BundleContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Bundle/Application/FC7A1D19-EBD9-4EE0-B7B5-1537C85BD204/";
+        CFBundleDisplayName = SaycribeDesign;
+        CFBundleExecutable = DesignPreview;
+        CFBundleIdentifier = "com.motomotos.saycribe.designpreview";
+        CFBundleName = DesignPreview;
+        CFBundleVersion = 1;
+        DataContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Data/Application/02F76A07-469B-4DAA-BC76-C720E63027DE/";
+        GroupContainers =         {
+        };
+        Path = "/Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Bundle/Application/FC7A1D19-EBD9-4EE0-B7B5-1537C85BD204/DesignPreview.app";
+        SBAppTags =         (
+        );
+    };
+    "dev.dsh.control" =     {
+        ApplicationType = User;
+        Bundle = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Bundle/Application/6FA4352A-4A28-427A-A30F-5FC737754A1B/DSHControl.app/";
+        BundleContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Bundle/Application/6FA4352A-4A28-427A-A30F-5FC737754A1B/";
+        CFBundleDisplayName = "DSH \U63a7\U5236\U53f0";
+        CFBundleExecutable = DSHControl;
+        CFBundleIdentifier = "dev.dsh.control";
+        CFBundleName = DSHControl;
+        CFBundleVersion = 1;
+        DataContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Data/Application/EBC2CAE4-4B78-4211-AB18-EEFC969DDDA2/";
+        GroupContainers =         {
+            "group.dev.dsh.control" = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Shared/AppGroup/F7519840-FD2E-4DED-8DBD-FF569B0B0FC7/";
+        };
+        Path = "/Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Bundle/Application/6FA4352A-4A28-427A-A30F-5FC737754A1B/DSHControl.app";
+        SBAppTags =         (
+        );
+    };
+    "dev.dsh.control.uitests.xctrunner" =     {
+        ApplicationType = User;
+        Bundle = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Bundle/Application/2C355507-CCED-44FA-BD21-711896DF8AD6/DSHControlUITests-Runner.app/";
+        BundleContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Bundle/Application/2C355507-CCED-44FA-BD21-711896DF8AD6/";
+        CFBundleDisplayName = "DSHControlUITests-Runner";
+        CFBundleExecutable = "DSHControlUITests-Runner";
+        CFBundleIdentifier = "dev.dsh.control.uitests.xctrunner";
+        CFBundleName = "DSHControlUITests-Runner";
+        CFBundleVersion = 1;
+        DataContainer = "file:///Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Data/Application/3EC3DEA1-06B8-4713-BC98-69CA4FAD3A53/";
+        GroupContainers =         {
+        };
+        Path = "/Users/zjh/Library/Developer/CoreSimulator/Devices/4E592401-906B-43E2-B81F-607550484C22/data/Containers/Bundle/Application/2C355507-CCED-44FA-BD21-711896DF8AD6/DSHControlUITests-Runner.app";
+        SBAppTags =         (
+        );
+    };
+}
+
+codex
+设计定为「声迹」：橙色按钮中央用一笔暖白 S 形声线，把 Saycribe 的首字母和“声音写成文字”连起来；外侧三层细声纹随音量向两侧舒展，停顿时收拢。纵向振幅会限制在按钮现有区域内，给下方提示字留出固定净空。
+exec
+/bin/zsh -lc "cp DesignPreview/Motion/MotionShowcase.swift /tmp/saycribe-voiceorb-before.swift; rg -n 'LevelBars' DesignPreview; sed -n '119,150p' project.yml; cat /Users/zjh/ecom-agent-memory/本地听写翻译/工作记录/Saycribe商店候选整改与系统服务验收.2026-10-28-1405.md" in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 0ms:
+DesignPreview/Motion/MotionShowcase.swift:588:                        LevelBars(level: level)
+DesignPreview/Motion/MotionShowcase.swift:620:struct LevelBars: View {
+  DesignPreview:
+    type: application
+    platform: iOS
+    sources: [DesignPreview]
+    info:
+      path: DesignPreview/Info.plist
+      properties:
+        CFBundleDisplayName: SaycribeDesign
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight, UIInterfaceOrientationPortraitUpsideDown]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.motomotos.saycribe.designpreview
+        TARGETED_DEVICE_FAMILY: "1,2"
+
+schemes:
+  SaycribeApp:
+    build:
+      targets: {SaycribeApp: all, SaycribeCore: all, SaycribeKeyboard: all}
+    test:
+      targets: [SaycribeCoreTests, SaycribeAppTests]
+  DesignPreview:
+    build:
+      targets: {DesignPreview: all}
+# Saycribe 商店候选整改与系统服务验收
+
+时间：2026-10-28T14:05-04:00。来源：Codex 当前会话直接执行/核查；默认单 Agent。
+
+## 交付
+
+- 独立源码 `/Users/zjh/Documents/Codex/2026-10-28/typeless-appstor/saycribe`，本地代码提交 `79988fa`；未 push。
+- 已安装 `/Users/zjh/Applications/Saycribe Store.app`，0.2.0/build 2、arm64、macOS 14+、Sandbox，开发 bundle ID `com.zjh.saycribe.storedev`，约259MiB。
+- Xcode 工程及开发归档 `saycribe/build/Saycribe Store.xcarchive` 已生成，尚非商店分发签名；没有上传/发布/收费。
+- 完整交付记录 `/Users/zjh/Documents/Codex/2026-10-28/typeless-appstor/Saycribe-商店整改交付.2026-10-28.md`，包含验收与未验、许可来源、发布缺口和命令。
+
+## 完成与真实证据
+
+- no-tts sherpa 候选不再含匹配的 eSpeak/piper 符号，未带 Kokoro/VAD/espeak-ng-data；许可证/NOTICE 已随包。打包检测同时用旧TTS库验证了正向检出。
+- Keychain 实测新增/读/改/删通过，合成测试条目已清除；旧 Key 由设置文件选择导入，不拷贝正文到记录。
+- 云端明确同意、默认离线、统一网络门禁和撤回取消已实现；7项URLProtocol拦截测试全过，无真实DeepSeek请求。
+- HID/session模拟粘贴在这台macOS15.7.3失败（权限预检true、退出0、无stderr）。最终候选移除商店版模拟按键，采用系统Services返回。
+- TextEdit 实际收到本地识别出的合成句子；取消服务保留原文；未授权/无Key的改写服务未改原文。完成阶段有用户同时操作，不冒称完全无人参与。
+- 服务入口：目标App→服务→Saycribe语音输入/改写所选文字。两项服务已在系统键盘设置启用。组合键方式只复制结果，需Cmd+V。
+- 最终候选不请求辅助功能或输入监控；先前测试授权的辅助功能条目仍开，撤回需要再次本人认证，已取消解锁未绕过。
+- 录音启停、合成本地ASR、开发归档、codesign deep/strict通过。最终主程序SHA256 `204a6be9f8d027647eba480991a62e7cbfd65acf112778a486ad0f4fe93af251`；最终UI已核对0字/0分钟、空历史。
+- 原仓库 `/Users/zjh/claude-workdir/suikou` 与原安装包保留，原主程序SHA256仍为 `607bd1365db0039d7e9b21d946617e5e5db3b5f8d767c63c51a80f04de8da6c7`。
+
+## 未完成/未测
+
+- 尚需用户接受服务入口变化和候选暂不含会议同传的范围，原版这些功能保留。
+- 物理键快捷键、其他编辑器兼容、真实DeepSeek成功路径、Intel、正式商店证书/profile、公开隐私/支持URL、商店资料及审核未完成。
+- 精确依赖二进制来源仍需发行前核对。vendor是指向原项目依赖的symlink，未纳入Git；未下载新依赖，仅获取发行所需许可文本。
+
+## 启动/验收
+
+```bash
+open '/Users/zjh/Applications/Saycribe Store.app'
+codesign --verify --deep --strict '/Users/zjh/Applications/Saycribe Store.app'
+```
+
+## 清理
+
+旧测试包3份、SwiftPM/Xcode缓存、音频、采样/临时输出和测试文稿已删除；两条测试历史及累计统计已清，最终UI复核为零；临时诊断源码/入口从最终产品移除。最终App、归档、源码、永久测试与文档保留。
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+from pathlib import Path
+p=Path('DesignPreview/Motion/MotionShowcase.swift')
+s=p.read_text()
+a=s.index('/// 录音主按钮：')
+b=s.index('/// Logo 旁状态点',a)
+s=s[:a]+'''/// 声迹：陶土橙印章、会呼吸的 S 形笔迹，以及向两侧舒展的等高声纹。
+struct VoiceOrb: View {
+    var recording: Bool
+    var start: Date
+    var pressed: Bool
+    var source: AudioLevelSource = SimulatedAudioLevel()
+    var diameter: CGFloat = 88
+
+    @Environment(\\\\.accessibilityReduceMotion) private var reduceMotion
+    @State private var level: Double = 0
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { ctx in
+            let elapsed = max(0, ctx.date.timeIntervalSince(start))
+            let phase = reduceMotion ? 0 : elapsed
+            ZStack {
+                Canvas { context, size in
+                    let center = CGPoint(x: size.width / 2, y: size.height / 2)
+                    if recording {
+                        ScribeVoiceContours.draw(in: context, center: center,
+                                                 radius: diameter / 2, level: level, time: phase)
+                        // 进度独立于声纹，仍保留原来的 60 秒语义。
+                        var progress = Path()
+                        progress.addArc(center: center, radius: diameter / 2 + 9,
+                                        startAngle: .degrees(-90),
+                                        endAngle: .degrees(-90 + 360 * min(1, elapsed / 60)),
+                                        clockwise: false)
+                        context.stroke(progress, with: .color(SaycribeColor.orange),
+                                       style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    } else {
+                        idleCorona(in: context, center: center, time: phase)
+                    }
+                }
+                // 声纹含描边限制在中心上下 80pt，既不改变占位，也不向提示字扩张。
+                .frame(width: diameter + 120, height: diameter + 120)
+                .clipped()
+
+                Circle()
+                    .fill(SaycribeColor.orangeDeep)
+                    .overlay {
+                        if recording {
+                            Circle()
+                                .fill(LinearGradient(
+                                    colors: [SaycribeColor.orange.opacity(0.85),
+                                             SaycribeColor.orangeDeep],
+                                    startPoint: .topLeading, endPoint: .bottomTrailing))
+                            Circle()
+                                .strokeBorder(SaycribeColor.textPrimary.opacity(0.16), lineWidth: 0.75)
+                        }
+                    }
+                    .frame(width: diameter, height: diameter)
+                    .shadow(color: SaycribeColor.orangeDeep.opacity(0.35), radius: 16, y: 6)
+                    .overlay {
+                        if recording {
+                            ScribeVoiceMark(level: level, time: phase)
+                                .frame(width: diameter * 0.58, height: diameter * 0.58)
+                        } else {
+                            Image(systemName: \"mic.fill\")
+                                .font(.system(size: diameter * 0.34, weight: .semibold))
+                                .foregroundStyle(SaycribeColor.textPrimary)
+                        }
+                    }
+                    .scaleEffect((1 + (recording ? 0.04 : 0.12) * CGFloat(level))
+                                 * (pressed ? 0.96 : 1))
+                    .animation(Motion.press, value: pressed)
+            }
+        }
+        .frame(width: diameter + 120, height: diameter + 120)
+        .task(id: recording) {
+            var previous = Date()
+            while "'!Task.isCancelled {
+                let now = Date()
+                let target = recording ? min(1, max(0, source.level(at: now.timeIntervalSince(start)))) : 0
+                // 75ms 起音、220ms 收音：跟随音节，不在停顿时抖动或弹跳。
+                let elapsed = now.timeIntervalSince(previous)
+                let response = target > level ? 0.075 : 0.22
+                level += (target - level) * (1 - exp(-elapsed / response))
+                previous = now
+                do {
+                    try await Task.sleep(nanoseconds: 33_333_333)
+                } catch {
+                    return // 录音切换或视图退出时取消采样。
+                }
+            }
+        }
+    }
+
+    /// 空闲态沿用原有细碎花冠，不改麦克风按钮的设计。
+    private func idleCorona(in context: GraphicsContext, center: CGPoint, time: Double) {
+        for fragment in 0..<13 {
+            let seed = Double(fragment)
+            let phase = time * 0.45 + seed * 2.39996
+            let breath = 0.5 + 0.5 * sin(time * 0.85 + seed * 0.3)
+            let spread = 5 + 35 * level
+            let stagger = (0.5 + 0.5 * sin(seed * 1.7)) * (2 + 7 * level)
+            let base = Double(diameter / 2) + 9 + spread - stagger + breath * 0.8
+            let centerAngle = seed / 13 * 2 * Double.pi + 0.04 * sin(phase)
+            let span = (0.19 + 0.11 * (0.5 + 0.5 * sin(seed * 3.1))) * (0.85 + 0.15 * level)
+            var path = Path()
+            for sample in 0...20 {
+                let angle = centerAngle + (Double(sample) / 20 - 0.5) * span
+                let petal = sin(angle * 3 + phase) * 0.62 + sin(angle * 5 - phase * 0.71) * 0.38
+                let radius = min(Double(diameter / 2) + 56, base + (0.5 + 7 * level) * petal)
+                let point = CGPoint(x: center.x + radius * cos(angle), y: center.y + radius * sin(angle))
+                if sample == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            }
+            let shimmer = 0.5 + 0.5 * sin(phase + seed)
+            context.stroke(path, with: .color(SaycribeColor.orange.opacity(
+                0.12 + level * (0.28 + 0.30 * shimmer))),
+                style: StrokeStyle(lineWidth: 0.9 + level * 0.9, lineCap: .round))
+        }
+    }
+}
+
+/// 三对开放声纹如纸上的等高线。大声主要向左右展开，底部没有向外传播的波环。
+private enum ScribeVoiceContours {
+    static func draw(in context: GraphicsContext, center: CGPoint,
+                     radius: CGFloat, level: Double, time: Double) {
+        for layer in 0..<3 {
+            let depth = Double(layer)
+            let horizontal = Double(radius) + 12 + depth * (3 + 8 * level) + 12 * level
+            let vertical = min(72, Double(radius) + 7 + depth * (3 + 3 * level) + 4 * level)
+            for side in 0..<2 {
+                var contour = Path()
+                for sample in 0...72 {
+                    let u = Double(sample) / 72
+                    let angle = (-0.42 + u * 0.84) * Double.pi + Double(side) * Double.pi
+                    // 起伏仅由音量放大；相位只负责让左右声纹自然错开。
+                    let ripple = level * (2.2 * sin(3 * angle + time * 2.1 - depth * 0.6)
+                                          + 1.2 * sin(5 * angle - time * 1.4))
+                    let x = (horizontal + ripple) * cos(angle)
+                    let y = (vertical + ripple * 0.55) * sin(angle)
+                    let point = CGPoint(x: center.x + x, y: center.y + y)
+                    if sample == 0 { contour.move(to: point) } else { contour.addLine(to: point) }
+                }
+                let opacity = (0.16 + 0.48 * level) * (1 - depth * 0.22)
+                context.stroke(contour, with: .linearGradient(
+                    Gradient(stops: [
+                        .init(color: SaycribeColor.orangeDeep.opacity(opacity * 0.12), location: 0),
+                        .init(color: SaycribeColor.orange.opacity(opacity), location: 0.45),
+                        .init(color: SaycribeColor.orangeDeep.opacity(opacity * 0.25), location: 1)
+                    ]),
+                    startPoint: CGPoint(x: center.x, y: center.y - vertical),
+                    endPoint: CGPoint(x: center.x, y: center.y + vertical)),
+                    style: StrokeStyle(lineWidth: 1.15 - depth * 0.15, lineCap: .round))
+            }
+        }
+    }
+}
+
+/// 一笔 S：两段圆润笔锋随响度张开，停顿仍留一个清晰、安静的 Saycribe 签名。
+private struct ScribeVoiceMark: View {
+    var level: Double
+    var time: Double
+
+    var body: some View {
+        Canvas { context, size in
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            let unit = size.width / 52
+            let sway = level * sin(time * 4.2) * 1.5
+            let bow = 15 + level * 7
+            let height = 13 + level * 4
+            func point(_ x: Double, _ y: Double) -> CGPoint {
+                CGPoint(x: center.x + x * unit, y: center.y + y * unit)
+            }
+            var signature = Path()
+            signature.move(to: point(12 + level * 2, -height + 1))
+            signature.addCurve(to: point(-1, 0),
+                               control1: point(-bow + sway, -height - 11),
+                               control2: point(-bow - 7, -3 - sway))
+            signature.addCurve(to: point(-13 - level, height - 1),
+                               control1: point(bow + 8, 3 + sway),
+                               control2: point(bow - sway, height + 12))
+            context.stroke(signature, with: .color(SaycribeColor.textPrimary),
+                           style: StrokeStyle(lineWidth: (3.8 + level * 0.5) * unit,
+                                              lineCap: .round, lineJoin: .round))
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+'"'''+s[b:]
+p.write_text(s)
+PY
+xcrun swiftc -typecheck -sdk \""'$(xcrun --sdk iphonesimulator --show-sdk-path)" -target arm64-apple-ios17.0-simulator $(rg --files DesignPreview -g '"'*.swift')" in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 4723ms:
+exec
+/bin/zsh -lc "uptime; ls -ld /tmp/saycribe-ios-heavy.lock; sed -n '65,85p' 测试报告/2026-10-30-模拟器识别与单测.md; ls -dt /tmp/*saycribe* /tmp/*Saycribe* 2>/dev/null | head -15" in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 0ms:
+23:27  up 1 day,  7:20, 1 user, load averages: 3.87 3.76 4.40
+drwxr-xr-x@ 2 zjh  wheel  64 Oct 30 23:25 /tmp/saycribe-ios-heavy.lock
+保留（本地、已 gitignore）：`platforms/ios/Vendor/`（`.a` + xcframework）、`platforms/core/target/` 构建缓存与完整 sherpa zip。
+
+## 6. 遗留
+
+1. **真机**尚未编装与 PoC；录音仍为 `PlaceholderRecorder`（空 PCM），需接 AVAudioEngine。
+2. 峰值内存偏高，真机键盘/主 App 内存预算需再压。
+3. `sc_status_message` 契约文档写「中文」但 core 实现为英文——已在 iOS Swift 侧兜底；建议 core 后续对齐文档或改文档。
+4. DesignPreview 与其它 bot 共用 Mac：继续用 `/tmp/saycribe-ios-heavy.lock` + `uptime` load&lt;10。
+5. Obsidian 仅在真实交付时写；本轮不算真机交付。
+zsh:1: no matches found: /tmp/*Saycribe*
+
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+exec
+/bin/zsh -lc "ls -la /tmp/saycribe-ios-heavy.lock; ps -Ao pid,etime,command | rg 'xcodebuild|swiftc|saycribe-ios-heavy|simctl' | head -20; sed -n '118,160p' 设计稿/说明.md; df -h /tmp" in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 0ms:
+total 0
+drwxr-xr-x@   2 zjh   wheel    64 Oct 30 23:25 .
+drwxrwxrwt  239 root  wheel  7648 Oct 30 23:27 ..
+23196       02:14 /Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex exec -m gpt-6.1-sol -c model_reasoning_effort=high --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check 目标：重做 Saycribe 录音按钮在「用户说话时」的动效 UI。要好看、有 Saycribe 自己的特色，不能像 Typeless。配色保持黑白橙（#0C0C0B #1A1917 #F5F3EE #9A968C #5C584F #D97757 #E08A6C）。具体怎么设计由你决定，可以在现有代码上改，也可以推倒重来。\012\012硬约束：\012- 只改说话态动效相关代码：DesignPreview/Motion/MotionShowcase.swift 里的录音按钮（VoiceOrb）及其直接辅助。\012- 不改页面布局、文案、中英胶囊、悬浮卡片、DesignTokens 配色色值。\012- 动效要跟音量联动；保留 AudioLevelSource / SimulatedAudioLevel 接口。\012- 大声时动效不能压到按钮下方的提示字。\012- 必须能编译（可用 xcrun swiftc -typecheck 针对 iOS Simulator SDK 检查）。不要 git 提交，不要联网下载。\012最后简述你的设计。
+23903       00:00 /bin/zsh -c ls -la /tmp/saycribe-ios-heavy.lock; ps -Ao pid,etime,command | rg 'xcodebuild|swiftc|saycribe-ios-heavy|simctl' | head -20; sed -n '118,160p' 设计稿/说明.md; df -h /tmp
+23906       00:00 rg xcodebuild|swiftc|saycribe-ios-heavy|simctl
+| 4 | 整条贴底的底部卡 | 悬浮圆角岛（左右各缩进 12pt，圆角 34） |
+| 5 | 只有 Logo 加名字 | 状态点加等宽标签「本机 · ZH」/「REC · ZH」（录音时状态点变橙）；键盘 Logo 旁加状态点，「点击说话」改成等宽「点按说话 · ZH」 |
+| 6 | 引导文案「点击麦克风，阅读下面的消息…」及同款朗读句 | 引导语「点按橙色按钮，朗读下方文字，再点一次即可插入。」；朗读句「下午三点会议室见，记得带上周方案初稿。有事微信说一声就行。——小何」；宿主 App 名「备忘录」改「草稿」 |
+| 7 | 左下系统地球图标 | 自有「中英」胶囊（等宽 11pt、字色 #9A968C、卡片色底 + 细描边，高 22pt），04 面板与 05 键盘一致（真机键盘扩展的系统切换键暂不动） |
+
+## 第七版-Codex动效（2026-10-30 / 北京时间 10-31）
+路径：`第七版-Codex动效/iPhone/`：`空闲.png`、`录音中-大声.png`、`录屏-音量波动.mp4`（约 14s）、`录屏-音量波动-小.mp4`（H.264 / 720 宽 / 30fps / 无音轨 / ~128KB）。
+
+### 来源
+说话态动效由本机 Codex CLI（ChatGPT App 自带 `0.165.0-alpha`，`-m gpt-6.1-sol`）重做；只改了 `DesignPreview/Motion/MotionShowcase.swift` 里的 `VoiceOrb` / `LevelBars`。第六版已有差异（中英胶囊、自有文案、悬浮岛、进度弧、状态标签）全部保留。
+
+### 相对第六版的动效差异
+1. 波纹：不再是 3 圈闭合正弦光晕，改成 13 段相位错开的有机短弧「碎弧花冠」，描边陶土橙，不闭合。
+2. 半径硬上限 `r0 + 56`（约 100pt），波纹不参与按钮 scale，避免外沿失控压字；间距仍用 `.padding(.bottom, -28)` / `.padding(.top, 64)`。
+3. 音量：快起慢落（升 75ms / 降 220ms 指数跟随），大声外圈扩张，停顿收拢为近静止；按钮 scale 仍约 `1 + 0.12 × level`。
+4. 按钮内声波：5 竖条 → 9 条暖白「声羽」，沿浅弧对称镜像，带轻微旋转与纵向偏移。
+5. 进度弧半径微调到 `r0 + 9`，仍 60s；`AudioLevelSource` / `SimulatedAudioLevel` 接口保留。
+6. 相对 Typeless：不是静态圆钮或同心光晕，而是可辨识的碎弧说话质感 + 弧形声羽。
+
+### 拍摄
+专用模拟器 `Saycribe-iPhone17Pro`；截图前 `status_bar override --time 9:41 --batteryState discharging --batteryLevel 100`（白色满格、无绿无闪电）。
+Filesystem      Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s5   228Gi   168Gi    19Gi    90%    2.0M  202M    1%   /System/Volumes/Data
+
+exec
+/bin/zsh -lc 'mkdir -p /tmp/saycribe-voiceorb-review.app
+xcrun swiftc -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" -target arm64-apple-ios17.0-simulator -parse-as-library $(rg --files DesignPreview -g '"'*.swift') -o /tmp/saycribe-voiceorb-review.app/DesignPreview
+python3 - <<'PY'
+import plistlib
+from pathlib import Path
+p=plistlib.loads(Path('DesignPreview/Info.plist').read_bytes())
+p.update(CFBundleExecutable='DesignPreview',CFBundleIdentifier='com.motomotos.saycribe.designpreview',CFBundleName='DesignPreview',CFBundleDevelopmentRegion='en',MinimumOSVersion='17.0',UIDeviceFamily=[1,2])
+Path('/tmp/saycribe-voiceorb-review.app/Info.plist').write_bytes(plistlib.dumps(p))
+PY
+codesign --force --sign - /tmp/saycribe-voiceorb-review.app
+xcrun simctl install booted /tmp/saycribe-voiceorb-review.app
+xcrun simctl launch booted com.motomotos.saycribe.designpreview -designMode page -designPage recording -loud" in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 8457ms:
+clang: warning: using sysroot for 'MacOSX' but targeting 'iPhone' [-Wincompatible-sysroot]
+/tmp/saycribe-voiceorb-review.app: replacing existing signature
+com.motomotos.saycribe.designpreview: 23994
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+from pathlib import Path
+before=Path('/tmp/saycribe-voiceorb-before.swift').read_text()
+after=Path('DesignPreview/Motion/MotionShowcase.swift').read_text()
+assert before[:before.index('/// 录音主按钮：')]==after[:after.index('/// 声迹：')]
+assert before[before.index('/// Logo 旁状态点'):]==after[after.index('/// Logo 旁状态点'):]
+print('范围检查通过：VoiceOrb 前后代码逐字一致；AudioLevelSource / SimulatedAudioLevel 原样保留。')
+import math
+max_x=max_y=0
+for frame in range(601):
+    t=frame/10
+    for l in [0,0.02,0.18,0.32,0.72,0.98,1]:
+        for layer in range(3):
+            horizontal=44+12+layer*(3+8*l)+12*l
+            vertical=min(72,44+7+layer*(3+3*l)+4*l)
+            for side in range(2):
+                for sample in range(73):
+                    angle=(-.42+sample/72*.84)*math.pi+side*math.pi
+                    ripple=l*(2.2*math.sin(3*angle+t*2.1-layer*.6)+1.2*math.sin(5*angle-t*1.4))
+                    max_x=max(max_x,abs((horizontal+ripple)*math.cos(angle))+(1.15-layer*.15)/2)
+                    max_y=max(max_y,abs((vertical+ripple*.55)*math.sin(angle))+(1.15-layer*.15)/2)
+print(f'0–60 秒 / 音量 0–1 声纹最大外沿：横向 ±{max_x:.2f}pt，纵向 ±{max_y:.2f}pt；提示字起点约 +140pt。')
+PY" in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 2243ms:
+范围检查通过：VoiceOrb 前后代码逐字一致；AudioLevelSource / SimulatedAudioLevel 原样保留。
+0–60 秒 / 音量 0–1 声纹最大外沿：横向 ±93.79pt，纵向 ±67.13pt；提示字起点约 +140pt。
+
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+codex
+新动效已通过 iOS Simulator SDK 的 typecheck，也已在模拟器运行。大声时声纹主要横向展开；实测轮廓纵向最远约 67pt，下方提示字从中心下方约 140pt 开始，净空充足。接下来核对小声、停顿和点按切换。
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+exec
+/bin/zsh -lc "python3 - <<'PY'
+from pathlib import Path
+p=Path('DesignPreview/Motion/MotionShowcase.swift')
+s=p.read_text().replace('TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { ctx in', 'TimelineView(.animation(minimumInterval: reduceMotion ? 1 : 1.0 / 30)) { ctx in')
+p.write_text(s)
+PY
+xcrun swiftc -typecheck -sdk \""'$(xcrun --sdk iphonesimulator --show-sdk-path)" -target arm64-apple-ios17.0-simulator $(rg --files DesignPreview -g '"'*.swift')
+xcrun simctl terminate booted com.motomotos.saycribe.designpreview
+xcrun swiftc -sdk \""'$(xcrun --sdk iphonesimulator --show-sdk-path)" -target arm64-apple-ios17.0-simulator -parse-as-library $(rg --files DesignPreview -g '"'*.swift') -o /tmp/saycribe-voiceorb-review.app/DesignPreview
+codesign --force --sign - /tmp/saycribe-voiceorb-review.app
+xcrun simctl install booted /tmp/saycribe-voiceorb-review.app
+xcrun simctl launch booted com.motomotos.saycribe.designpreview -designMode page -designPage recording" in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 13380ms:
+clang: warning: using sysroot for 'MacOSX' but targeting 'iPhone' [-Wincompatible-sysroot]
+/tmp/saycribe-voiceorb-review.app: replacing existing signature
+com.motomotos.saycribe.designpreview: 24614
+
+exec
+/bin/zsh -lc 'diff -u /tmp/saycribe-voiceorb-before.swift DesignPreview/Motion/MotionShowcase.swift' in /Users/zjh/claude-workdir/suikou/platforms/ios
+ exited 1 in 0ms:
+--- /tmp/saycribe-voiceorb-before.swift	2026-10-30 23:26:12
++++ DesignPreview/Motion/MotionShowcase.swift	2026-10-30 23:28:16
+@@ -522,7 +522,7 @@
+     }
+ }
+ 
+-/// 录音主按钮：陶土橙圆 + 随音量舒展的碎弧花冠 + 60 秒进度弧。
++/// 声迹：陶土橙印章、会呼吸的 S 形笔迹，以及向两侧舒展的等高声纹。
+ struct VoiceOrb: View {
+     var recording: Bool
+     var start: Date
+@@ -530,78 +530,72 @@
+     var source: AudioLevelSource = SimulatedAudioLevel()
+     var diameter: CGFloat = 88
+ 
++    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+     @State private var level: Double = 0
+ 
+     var body: some View {
+-        ZStack {
+-            TimelineView(.animation(minimumInterval: 1.0 / 30)) { ctx in
+-                let t = max(0, ctx.date.timeIntervalSince(start))
+-                Canvas { c, size in
+-                    let ctr = CGPoint(x: size.width / 2, y: size.height / 2)
+-                    let r0 = diameter / 2
+-                    // 一条断开的不规则花冠，各短弧有独立相位与径向错位；没有闭合光晕。
+-                    // 半径硬上限 r0 + 56，含描边外沿默认 ≤ 101pt，不参与按钮缩放。
+-                    for fragment in 0..<13 {
+-                        let seed = Double(fragment)
+-                        let phase = t * 0.45 + seed * 2.39996
+-                        let breath = 0.5 + 0.5 * sin(t * 0.85 + seed * 0.3)
+-                        let spread = 5 + 35 * level
+-                        let stagger = (0.5 + 0.5 * sin(seed * 1.7)) * (2 + 7 * level)
+-                        let base = Double(r0) + 9 + spread - stagger + breath * 0.8
+-                        let centerAngle = seed / 13 * 2 * Double.pi + 0.04 * sin(phase)
+-                        let span = (0.19 + 0.11 * (0.5 + 0.5 * sin(seed * 3.1))) * (0.85 + 0.15 * level)
+-                        var path = Path()
+-                        for sample in 0...20 {
+-                            let u = Double(sample) / 20
+-                            let angle = centerAngle + (u - 0.5) * span
+-                            let petal = sin(angle * 3 + phase) * 0.62
+-                                + sin(angle * 5 - phase * 0.71) * 0.38
+-                            let radius = min(Double(r0) + 56, base + (0.5 + 7 * level) * petal)
+-                            let point = CGPoint(x: ctr.x + CGFloat(radius * cos(angle)),
+-                                                y: ctr.y + CGFloat(radius * sin(angle)))
+-                            if sample == 0 { path.move(to: point) } else { path.addLine(to: point) }
+-                        }
+-                        let shimmer = 0.5 + 0.5 * sin(phase + seed)
+-                        c.stroke(path, with: .color(SaycribeColor.orange.opacity(
+-                            0.12 + level * (0.28 + 0.30 * shimmer))),
+-                            style: StrokeStyle(lineWidth: 0.9 + level * 0.9, lineCap: .round))
+-                    }
++        TimelineView(.animation(minimumInterval: reduceMotion ? 1 : 1.0 / 30)) { ctx in
++            let elapsed = max(0, ctx.date.timeIntervalSince(start))
++            let phase = reduceMotion ? 0 : elapsed
++            ZStack {
++                Canvas { context, size in
++                    let center = CGPoint(x: size.width / 2, y: size.height / 2)
+                     if recording {
+-                        // 60 秒进度弧保持独立，始终贴近按钮。
+-                        let prog = min(1, max(0, t / 60))
+-                        var arc = Path()
+-                        arc.addArc(center: ctr, radius: r0 + 9, startAngle: .degrees(-90),
+-                                   endAngle: .degrees(-90 + 360 * prog), clockwise: false)
+-                        c.stroke(arc, with: .color(SaycribeColor.orange),
+-                                 style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
++                        ScribeVoiceContours.draw(in: context, center: center,
++                                                 radius: diameter / 2, level: level, time: phase)
++                        // 进度独立于声纹，仍保留原来的 60 秒语义。
++                        var progress = Path()
++                        progress.addArc(center: center, radius: diameter / 2 + 9,
++                                        startAngle: .degrees(-90),
++                                        endAngle: .degrees(-90 + 360 * min(1, elapsed / 60)),
++                                        clockwise: false)
++                        context.stroke(progress, with: .color(SaycribeColor.orange),
++                                       style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
++                    } else {
++                        idleCorona(in: context, center: center, time: phase)
+                     }
+                 }
++                // 声纹含描边限制在中心上下 80pt，既不改变占位，也不向提示字扩张。
+                 .frame(width: diameter + 120, height: diameter + 120)
+-            }
++                .clipped()
+ 
+-            Circle()
+-                .fill(SaycribeColor.orangeDeep)
+-                .frame(width: diameter, height: diameter)
+-                .shadow(color: SaycribeColor.orangeDeep.opacity(0.35), radius: 16, y: 6)
+-                .overlay {
+-                    if recording {
+-                        LevelBars(level: level)
+-                    } else {
+-                        Image(systemName: "mic.fill")
+-                            .font(.system(size: diameter * 0.34, weight: .semibold))
+-                            .foregroundStyle(SaycribeColor.textPrimary)
++                Circle()
++                    .fill(SaycribeColor.orangeDeep)
++                    .overlay {
++                        if recording {
++                            Circle()
++                                .fill(LinearGradient(
++                                    colors: [SaycribeColor.orange.opacity(0.85),
++                                             SaycribeColor.orangeDeep],
++                                    startPoint: .topLeading, endPoint: .bottomTrailing))
++                            Circle()
++                                .strokeBorder(SaycribeColor.textPrimary.opacity(0.16), lineWidth: 0.75)
++                        }
+                     }
+-                }
+-                .scaleEffect((1 + 0.12 * CGFloat(level)) * (pressed ? 0.96 : 1))
+-                .animation(Motion.press, value: pressed)
++                    .frame(width: diameter, height: diameter)
++                    .shadow(color: SaycribeColor.orangeDeep.opacity(0.35), radius: 16, y: 6)
++                    .overlay {
++                        if recording {
++                            ScribeVoiceMark(level: level, time: phase)
++                                .frame(width: diameter * 0.58, height: diameter * 0.58)
++                        } else {
++                            Image(systemName: "mic.fill")
++                                .font(.system(size: diameter * 0.34, weight: .semibold))
++                                .foregroundStyle(SaycribeColor.textPrimary)
++                        }
++                    }
++                    .scaleEffect((1 + (recording ? 0.04 : 0.12) * CGFloat(level))
++                                 * (pressed ? 0.96 : 1))
++                    .animation(Motion.press, value: pressed)
++            }
+         }
+         .frame(width: diameter + 120, height: diameter + 120)
+         .task(id: recording) {
+             var previous = Date()
+             while !Task.isCancelled {
+                 let now = Date()
+-                let target = recording ? source.level(at: now.timeIntervalSince(start)) : 0
+-                // 时间相关的快起慢落：停顿时稳定收拢，不用高回弹弹簧反复追逐音量。
++                let target = recording ? min(1, max(0, source.level(at: now.timeIntervalSince(start)))) : 0
++                // 75ms 起音、220ms 收音：跟随音节，不在停顿时抖动或弹跳。
+                 let elapsed = now.timeIntervalSince(previous)
+                 let response = target > level ? 0.075 : 0.22
+                 level += (target - level) * (1 - exp(-elapsed / response))
+@@ -609,37 +603,103 @@
+                 do {
+                     try await Task.sleep(nanoseconds: 33_333_333)
+                 } catch {
+-                    return // recording 改变或视图退出时结束旧采样任务。
++                    return // 录音切换或视图退出时取消采样。
+                 }
+             }
+         }
+     }
++
++    /// 空闲态沿用原有细碎花冠，不改麦克风按钮的设计。
++    private func idleCorona(in context: GraphicsContext, center: CGPoint, time: Double) {
++        for fragment in 0..<13 {
++            let seed = Double(fragment)
++            let phase = time * 0.45 + seed * 2.39996
++            let breath = 0.5 + 0.5 * sin(time * 0.85 + seed * 0.3)
++            let spread = 5 + 35 * level
++            let stagger = (0.5 + 0.5 * sin(seed * 1.7)) * (2 + 7 * level)
++            let base = Double(diameter / 2) + 9 + spread - stagger + breath * 0.8
++            let centerAngle = seed / 13 * 2 * Double.pi + 0.04 * sin(phase)
++            let span = (0.19 + 0.11 * (0.5 + 0.5 * sin(seed * 3.1))) * (0.85 + 0.15 * level)
++            var path = Path()
++            for sample in 0...20 {
++                let angle = centerAngle + (Double(sample) / 20 - 0.5) * span
++                let petal = sin(angle * 3 + phase) * 0.62 + sin(angle * 5 - phase * 0.71) * 0.38
++                let radius = min(Double(diameter / 2) + 56, base + (0.5 + 7 * level) * petal)
++                let point = CGPoint(x: center.x + radius * cos(angle), y: center.y + radius * sin(angle))
++                if sample == 0 { path.move(to: point) } else { path.addLine(to: point) }
++            }
++            let shimmer = 0.5 + 0.5 * sin(phase + seed)
++            context.stroke(path, with: .color(SaycribeColor.orange.opacity(
++                0.12 + level * (0.28 + 0.30 * shimmer))),
++                style: StrokeStyle(lineWidth: 0.9 + level * 0.9, lineCap: .round))
++        }
++    }
+ }
+ 
+-/// 暖白镜像声羽：九条沿浅弧展开，成对跳动，停顿时收成细小的弧形刻度。
+-struct LevelBars: View {
++/// 三对开放声纹如纸上的等高线。大声主要向左右展开，底部没有向外传播的波环。
++private enum ScribeVoiceContours {
++    static func draw(in context: GraphicsContext, center: CGPoint,
++                     radius: CGFloat, level: Double, time: Double) {
++        for layer in 0..<3 {
++            let depth = Double(layer)
++            let horizontal = Double(radius) + 12 + depth * (3 + 8 * level) + 12 * level
++            let vertical = min(72, Double(radius) + 7 + depth * (3 + 3 * level) + 4 * level)
++            for side in 0..<2 {
++                var contour = Path()
++                for sample in 0...72 {
++                    let u = Double(sample) / 72
++                    let angle = (-0.42 + u * 0.84) * Double.pi + Double(side) * Double.pi
++                    // 起伏仅由音量放大；相位只负责让左右声纹自然错开。
++                    let ripple = level * (2.2 * sin(3 * angle + time * 2.1 - depth * 0.6)
++                                          + 1.2 * sin(5 * angle - time * 1.4))
++                    let x = (horizontal + ripple) * cos(angle)
++                    let y = (vertical + ripple * 0.55) * sin(angle)
++                    let point = CGPoint(x: center.x + x, y: center.y + y)
++                    if sample == 0 { contour.move(to: point) } else { contour.addLine(to: point) }
++                }
++                let opacity = (0.16 + 0.48 * level) * (1 - depth * 0.22)
++                context.stroke(contour, with: .linearGradient(
++                    Gradient(stops: [
++                        .init(color: SaycribeColor.orangeDeep.opacity(opacity * 0.12), location: 0),
++                        .init(color: SaycribeColor.orange.opacity(opacity), location: 0.45),
++                        .init(color: SaycribeColor.orangeDeep.opacity(opacity * 0.25), location: 1)
++                    ]),
++                    startPoint: CGPoint(x: center.x, y: center.y - vertical),
++                    endPoint: CGPoint(x: center.x, y: center.y + vertical)),
++                    style: StrokeStyle(lineWidth: 1.15 - depth * 0.15, lineCap: .round))
++            }
++        }
++    }
++}
++
++/// 一笔 S：两段圆润笔锋随响度张开，停顿仍留一个清晰、安静的 Saycribe 签名。
++private struct ScribeVoiceMark: View {
+     var level: Double
+-    var count = 9
++    var time: Double
+ 
+     var body: some View {
+-        TimelineView(.animation(minimumInterval: 1.0 / 30)) { ctx in
+-            let t = ctx.date.timeIntervalSinceReferenceDate
+-            HStack(spacing: 2.5) {
+-                ForEach(0..<count, id: \.self) { i in
+-                    let center = Double(count - 1) / 2
+-                    let position = Double(i) - center
+-                    let distance = abs(position) / max(1, center)
+-                    let envelope = 1 - 0.55 * distance
+-                    let syllable = 0.65 + 0.35 * sin(t * 7.2 - abs(position) * 0.85)
+-                    Capsule()
+-                        .fill(SaycribeColor.textPrimary)
+-                        .frame(width: 3, height: 4 + CGFloat(level * envelope * syllable) * 28)
+-                        .rotationEffect(.degrees(position * 5))
+-                        .offset(y: CGFloat(distance * distance) * 7 - 3)
+-                }
++        Canvas { context, size in
++            let center = CGPoint(x: size.width / 2, y: size.height / 2)
++            let unit = size.width / 52
++            let sway = level * sin(time * 4.2) * 1.5
++            let bow = 15 + level * 7
++            let height = 13 + level * 4
++            func point(_ x: Double, _ y: Double) -> CGPoint {
++                CGPoint(x: center.x + x * unit, y: center.y + y * unit)
+             }
+-            .frame(height: 40)
++            var signature = Path()
++            signature.move(to: point(12 + level * 2, -height + 1))
++            signature.addCurve(to: point(-1, 0),
++                               control1: point(-bow + sway, -height - 11),
++                               control2: point(-bow - 7, -3 - sway))
++            signature.addCurve(to: point(-13 - level, height - 1),
++                               control1: point(bow + 8, 3 + sway),
++                               control2: point(bow - sway, height + 12))
++            context.stroke(signature, with: .color(SaycribeColor.textPrimary),
++                           style: StrokeStyle(lineWidth: (3.8 + level * 0.5) * unit,
++                                              lineCap: .round, lineJoin: .round))
+         }
++        .accessibilityHidden(true)
+     }
+ }
+ 
+
+exec
+/bin/zsh -lc 'xcrun simctl launch --terminate-running-process booted com.motomotos.saycribe.designpreview -designMode page -designPage recording' in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 203ms:
+com.motomotos.saycribe.designpreview: 24664
+
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+exec
+/bin/zsh -lc 'xcrun simctl launch --terminate-running-process booted com.motomotos.saycribe.designpreview -designMode page -designPage recording' in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 350ms:
+com.motomotos.saycribe.designpreview: 24767
+
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+codex
+已在模拟器核对大声、小声、停顿和点按结束录音：声纹会随音量展开、收紧，停顿时 S 形笔迹稳定留下；提示字始终完整可见。页面、文案和配色 token 均未改动，正在清理本轮临时产物。
+exec
+/bin/zsh -lc "date '+%Y-%m-%d %H:%M:%S %z'; python3 /Users/zjh/ecom-agent-memory/save_handoff.py --help" in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 0ms:
+2026-10-30 23:29:41 -0400
+usage: save_handoff.py [-h] [--project PROJECT] --title TITLE [--agent AGENT]
+                       [--done [DONE ...]] [--next [NEXT_STEPS ...]]
+                       [--blocked BLOCKED] [--files [FILES ...]]
+                       [--context CONTEXT]
+
+把一次工作记进共享库
+
+options:
+  -h, --help            show this help message and exit
+  --project PROJECT     项目文件夹名，例如 图掌柜
+  --title TITLE
+  --agent AGENT
+  --done [DONE ...]
+  --next [NEXT_STEPS ...]
+  --blocked BLOCKED
+  --files [FILES ...]
+  --context CONTEXT
+
+exec
+/bin/zsh -lc "python3 /Users/zjh/ecom-agent-memory/save_handoff.py --project 本地听写翻译 --title 'Saycribe iOS 说话态声迹动效' --agent Codex --done '仅改 MotionShowcase.swift 的 VoiceOrb 及直接辅助：陶土橙按钮、暖白 S 形笔迹、三对开放声纹，均随音量响应。' 'AudioLevelSource / SimulatedAudioLevel、页面布局、文案、中英胶囊、悬浮卡片及 DesignTokens 未改。' 'iOS Simulator SDK arm64 iOS17 swiftc typecheck 通过；编译安装到现有 Saycribe-iPhone17Pro，Computer Use 核对大声、小声、8秒停顿和点按结束录音。' '0–60秒、音量0–1离散扫描：默认88pt按钮声纹含描边外沿横向93.79pt、纵向67.13pt；提示字起点约中心下140pt。' --next '用户评审声迹视觉；实际麦克风接线不在本轮范围。' --files /Users/zjh/claude-workdir/suikou/platforms/ios/DesignPreview/Motion/MotionShowcase.swift --context '本轮仅本地 SwiftUI 动效改造，无 git 提交、无联网下载。保留75ms起音/220ms收音和60秒进度弧。验证命令：在 platforms/ios 执行 xcrun swiftc -typecheck -sdk \""'$(xcrun --sdk iphonesimulator --show-sdk-path)" -target arm64-apple-ios17.0-simulator $(rg --files DesignPreview -g "*.swift")。完整链接编译出现clang sysroot兼容警告，但退出0且模拟器运行成功。临时基线和临时app目录收尾删除；截图仅由Computer Use返回，没有落盘。'"'" in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 0ms:
+[OK] 已写入 /Users/zjh/ecom-agent-memory/本地听写翻译/工作记录/Saycribe iOS 说话态声迹动效.2026-10-30-2329.md
+[WARN] Hermes 记忆没有写入：本机没有记忆客户端
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+from pathlib import Path
+import shutil
+source=Path('DesignPreview/Motion/MotionShowcase.swift')
+before=Path('/tmp/saycribe-voiceorb-before.swift').read_text()
+after=source.read_text()
+assert before[:before.index('/// 录音主按钮：')]==after[:after.index('/// 声迹：')]
+assert before[before.index('/// Logo 旁状态点'):]==after[after.index('/// Logo 旁状态点'):]
+current=Path('/Users/zjh/ecom-agent-memory/本地听写翻译/现在做到哪.md')
+entry='2026-10-30 iOS DesignPreview：仅重做 "'`/Users/zjh/claude-workdir/suikou/platforms/ios/DesignPreview/Motion/MotionShowcase.swift` 的 VoiceOrb 及直接辅助。新「声迹」为橙钮 + 暖白 S 形笔迹 + 三对开放声纹；音量控制舒展/收拢，页面与配色 token 原样保留。Simulator SDK typecheck、编译安装与大声/小声/停顿/点按结束的 Computer Use 核对通过；无 git 提交、无联网下载、未接实麦。详见 [本轮工作记录](工作记录/Saycribe%20iOS%20说话态声迹动效.2026-10-30-2329.md)。'"\\n\\n'
+s=current.read_text()
+assert entry not in s
+s=s.replace('# 本地听写翻译现在做到哪\\n\\n','# 本地听写翻译现在做到哪\\n\\n'+entry,1)
+current.write_text(s)
+assert entry in current.read_text()
+Path('/tmp/saycribe-voiceorb-before.swift').unlink()
+shutil.rmtree('/tmp/saycribe-voiceorb-review.app')
+assert not Path('/tmp/saycribe-voiceorb-before.swift').exists()
+assert not Path('/tmp/saycribe-voiceorb-review.app').exists()
+print('最终范围检查通过；临时基线与编译 app 目录已删除，均确认不存在；未生成磁盘截图。')
+PY
+cat '/Users/zjh/ecom-agent-memory/本地听写翻译/工作记录/Saycribe iOS 说话态声迹动效.2026-10-30-2329.md'
+head -5 /Users/zjh/ecom-agent-memory/本地听写翻译/现在做到哪.md
+tail -12 /Users/zjh/ecom-agent-memory/每日记录/流水.2026-10-30.md" in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 0ms:
+最终范围检查通过；临时基线与编译 app 目录已删除，均确认不存在；未生成磁盘截图。
+# Saycribe iOS 说话态声迹动效
+
+**时间**: 2026-10-30 23:29:51  
+**项目**: 本地听写翻译  
+**来自**: Codex  
+
+## 背景
+本轮仅本地 SwiftUI 动效改造，无 git 提交、无联网下载。保留75ms起音/220ms收音和60秒进度弧。验证命令：在 platforms/ios 执行 xcrun swiftc -typecheck -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" -target arm64-apple-ios17.0-simulator $(rg --files DesignPreview -g "*.swift")。完整链接编译出现clang sysroot兼容警告，但退出0且模拟器运行成功。临时基线和临时app目录收尾删除；截图仅由Computer Use返回，没有落盘。
+
+## 已完成
+- 仅改 MotionShowcase.swift 的 VoiceOrb 及直接辅助：陶土橙按钮、暖白 S 形笔迹、三对开放声纹，均随音量响应。
+- AudioLevelSource / SimulatedAudioLevel、页面布局、文案、中英胶囊、悬浮卡片及 DesignTokens 未改。
+- iOS Simulator SDK arm64 iOS17 swiftc typecheck 通过；编译安装到现有 Saycribe-iPhone17Pro，Computer Use 核对大声、小声、8秒停顿和点按结束录音。
+- 0–60秒、音量0–1离散扫描：默认88pt按钮声纹含描边外沿横向93.79pt、纵向67.13pt；提示字起点约中心下140pt。
+
+## 下一步
+- 用户评审声迹视觉；实际麦克风接线不在本轮范围。
+
+## 涉及文件
+- `/Users/zjh/claude-workdir/suikou/platforms/ios/DesignPreview/Motion/MotionShowcase.swift`
+
+# 本地听写翻译现在做到哪
+
+2026-10-30 iOS DesignPreview：仅重做 `/Users/zjh/claude-workdir/suikou/platforms/ios/DesignPreview/Motion/MotionShowcase.swift` 的 VoiceOrb 及直接辅助。新「声迹」为橙钮 + 暖白 S 形笔迹 + 三对开放声纹；音量控制舒展/收拢，页面与配色 token 原样保留。Simulator SDK typecheck、编译安装与大声/小声/停顿/点按结束的 Computer Use 核对通过；无 git 提交、无联网下载、未接实麦。详见 [本轮工作记录](工作记录/Saycribe%20iOS%20说话态声迹动效.2026-10-30-2329.md)。
+
+2026-10-28 商店整改：独立候选 `/Users/zjh/Applications/Saycribe Store.app` 已安装（0.2.0，Sandbox，约259MiB）。源码 `/Users/zjh/Documents/Codex/2026-10-28/typeless-appstor/saycribe`，本地代码提交79988fa。Keychain、明确云端同意/默认离线/撤回、no-tts依赖及许可、Xcode开发归档已实施；7项隐私测试通过。TextEdit通过系统Services实际接收听写结果，取消保持原文。原按键自动粘贴未验通，商店候选改用服务入口自动返回，组合键只复制；会议同传仍仅原自用版保留。尚未提交，正式签名/公开网页/商店资料及其他App兼容待办。详见 [本轮交付记录](工作记录/Saycribe商店候选整改与系统服务验收.2026-10-28-1405.md)。原自用版与原仓库未覆盖。
+下一步：等牙膏哥开通阿里云邮件推送并确认后，AccessKey 写入 /etc/motomotos-account.env，去掉 ACCOUNT_DRY_RUN，再自测真发信 / P0/P1 合进主线后 rebase 处理重叠入口
+记录：[账号登录改版第一期落地.2026-10-30-1920](../motomotos/工作记录/账号登录改版第一期落地.2026-10-30-1920.md)
+
+## 20:56 [motomotos·Win终端状态] Win终端状态-阶段6A完成
+完成：feature/sessions-6a @ d3fe3d4：Motomotos.Sessions+Island/Sessions 独立列表与 CodexWatch；65/65 单测；预览窗自测通过（selftest+记事本跳转；Codex TEMP 样本） / MainWindow 零改动；截图四张在 worktree 资料/截图与录屏/阶段6 / 已交灵动岛验收；已请 Windows版从 D:\motomotos-wt\sessions-6a worktree 合并
+下一步：等灵动岛验收与 Windows版合入 / 合入并抽出展开宿主后接真岛；再开 6B 审批（feature/win-approvals）
+记录：[Win终端状态-阶段6A完成.2026-10-30-2056](../motomotos/工作记录/Win终端状态-阶段6A完成.2026-10-30-2056.md)
+
+## 23:29 [Codex] Saycribe iOS 说话态声迹动效
+完成：仅改 MotionShowcase.swift 的 VoiceOrb 及直接辅助：陶土橙按钮、暖白 S 形笔迹、三对开放声纹，均随音量响应。 / AudioLevelSource / SimulatedAudioLevel、页面布局、文案、中英胶囊、悬浮卡片及 DesignTokens 未改。 / iOS Simulator SDK arm64 iOS17 swiftc typecheck 通过；编译安装到现有 Saycribe-iPhone17Pro，Computer Use 核对大声、小声、8秒停顿和点按结束录音。
+下一步：用户评审声迹视觉；实际麦克风接线不在本轮范围。
+记录：[Saycribe iOS 说话态声迹动效.2026-10-30-2329](../本地听写翻译/工作记录/Saycribe iOS 说话态声迹动效.2026-10-30-2329.md)
+
+codex
+已在 [MotionShowcase.swift](/Users/zjh/claude-workdir/suikou/platforms/ios/DesignPreview/Motion/MotionShowcase.swift:525) 完成「声迹」设计：
+
+- 陶土橙按钮中央是一笔暖白 S，呼应 Saycribe 与“声音写成文字”。
+- 三对开放声纹随音量横向舒展，停顿时收紧，快起慢落。
+- 大声时声纹纵向外沿约 67pt，不压下方提示字。
+
+仅改 VoiceOrb 及直接辅助；接口、页面、文案和配色 token 保持原样。已通过 typecheck、模拟器编译运行及状态核对。临时产物已清理，无 git 提交、无联网下载。
+tokens used
+90,416
+已在 [MotionShowcase.swift](/Users/zjh/claude-workdir/suikou/platforms/ios/DesignPreview/Motion/MotionShowcase.swift:525) 完成「声迹」设计：
+
+- 陶土橙按钮中央是一笔暖白 S，呼应 Saycribe 与“声音写成文字”。
+- 三对开放声纹随音量横向舒展，停顿时收紧，快起慢落。
+- 大声时声纹纵向外沿约 67pt，不压下方提示字。
+
+仅改 VoiceOrb 及直接辅助；接口、页面、文案和配色 token 保持原样。已通过 typecheck、模拟器编译运行及状态核对。临时产物已清理，无 git 提交、无联网下载。

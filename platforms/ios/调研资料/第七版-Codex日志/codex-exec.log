@@ -1,0 +1,1496 @@
+Reading additional input from stdin...
+OpenAI Codex v0.165.0-alpha.1.2
+--------
+workdir: /Users/zjh/claude-workdir/suikou/platforms/ios
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: medium
+reasoning summaries: none
+session id: 01a18fec-40f2-77c1-98a0-9e7fda83ab71
+--------
+user
+你在 Saycribe iOS 项目（cwd=platforms/ios）。只重做 DesignPreview 里「说话态动效」：DesignPreview/Motion/MotionShowcase.swift 中的 VoiceOrb、LevelBars 及其直接依赖的局部辅助；可微调 DesignPreview/Motion/Motion.swift 中只服务这些动效的弹簧参数。
+禁止改：页面布局、引导文案、朗读句、中英胶囊、悬浮岛结构、键盘布局屏、品牌 Logo/状态标签文案、DesignTokens 色值（可新增透明度/线宽）。不要改其它目录，不要运行 git 提交，不要联网下载。
+调色板只用黑白橙：#0C0C0B #1A1917 #F5F3EE #9A968C #5C584F #D97757 #E08A6C。
+设计目标（Saycribe 自有，不要 Typeless 式同心圆光晕，也要和当前版本的 3 圈正弦波纹明显不同）：
+1. 波纹：有机不规则、多瓣、相位错开的边缘（如 Canvas/TimelineView 绘制的 blob 轮廓），或粒子感短弧；可动画、性能可接受。
+2. 音量联动：按钮 scale 跟 level；大声时外圈明显扩张，停顿时收回为近静止慢呼吸。
+3. 按钮内声波条：跟 level 联动，形态与当前 5 竖条不同（如更多条、对称镜像、弧形排布），颜色白/主文字色。
+4. 保留 60s 进度弧与录音态逻辑；AudioLevelSource / SimulatedAudioLevel 接口保留（曲线 timing 可微调不可删）。
+5. 大声时波纹不得压住下方提示字：保持按钮区 .padding(.bottom, -28) 与下方文字 .padding(.top, 64) 的策略，或按新波纹最大半径调整，确保最大外沿不超过原有范围。
+6. 改完确保能编译（可用 swiftc -parse 或 xcodebuild 检查语法；若 xcodebuild 太重可只做 typecheck）。最后简述改动。
+warning: Under-development features enabled: respect_system_proxy. Under-development features are incomplete and may behave unpredictably. To suppress this warning, set `suppress_unstable_features_warning = true` in /Users/zjh/.codex/config.toml.
+codex
+我先读取项目规则和现有动效实现，确认范围后只调整 VoiceOrb、LevelBars 及其局部依赖，再做编译检查。
+exec
+/bin/zsh -lc 'cat /Users/zjh/ecom-agent-memory/prompts/agent-default.md /Users/zjh/ecom-agent-memory/prompts/agent-team-sop.md /Users/zjh/ecom-agent-memory/prompts/team/models.md' in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 0ms:
+---
+title: 膏哥 Agent 默认启动指令
+version: 2026-10-28.1
+status: active
+---
+
+# 膏哥 Agent 默认启动指令
+
+这是 Claude、Codex、Grok 及未来模型共同使用的工作入口。继承工作事实与方法，不冒充其他模型。本文取代旧 `claude-default.md` 正文，旧路径保留为兼容入口。
+
+## 单 Agent 默认执行（2026-10-28，覆盖全文旧同主题规则）
+
+- 开发、执行、调试、代码审查、功能测试和交付任务一律由当前主 Agent 在当前会话直接完成，默认并发数为 1；不得启动、派发、恢复或递归创建任何子 Agent。
+- 主 Agent 可以并且应当亲自写业务代码、修补实现、运行测试、操作 UI、审查结果和归档，不再受“主 Agent 不写代码”“实质开发必须团队推进”“独立岗位必须另开会话”等旧规则限制。
+- 产品经理、架构、设计、开发、审查、测试、维护仍可作为同一主 Agent 的阶段性职责和检查清单使用，但不得据此创建子 Agent。
+- 只有膏哥今后对某个具体任务再次明确要求“开子 Agent / 多 Agent / 并行 Agent”，才允许仅对该任务临时启用；配置里已有角色或并发额度不构成启动授权。
+- 下文所有“子 Agent 交付、派活、成果触发、独立岗位、释放主对话”的条款均降为显式启用多 Agent 时的备用流程；单 Agent 模式下不触发，也不得以“不能委派”为由拒绝或停止开发。
+
+2026-10-02：新功能的顺序改了。先看 `agent-team-sop.md` 开头的「2026-10-02 开发流程」。产品文档和设计文档（含出图）没经主 Agent 合格评估，不得进入开发阶段。功能测试用 Computer Use 跑通后才交给膏哥。
+
+## 子 Agent 交付不得失联（仅在膏哥明确临时启用多 Agent 时适用）
+
+- 主 Agent 对结果接续和用户反馈负责。子 Agent 完成不等于整个项目完成，不得把子任务标 completed 后就静默停住，让用户反复追问。
+- 子 Agent 完成、失败或需要主 Agent 决策时：先落地交付文件，再向主 Agent 发送一次交接并给 final。交接包含任务 ID、产物绝对路径/版本、已做与未做、真实测试与未测、阻塞、建议下一关；不只留下工具输出，不直接给其他岗位派活。
+- 主 Agent 收到新成果时，必须读取实际产物和必要证据，裁决接受或退回，在已有授权内续派下一必要步骤，并向用户反馈结论、验收状态、剩余问题和下一步。能继续就继续，不把“等用户追问”作为默认交接方式。
+- 每次启动或恢复主回合，对已派发任务核对一次未处理结果；没有新结果不重复读取上下文或轮询。用户的新问题先简短回答，但不能因此遗忘已到达成果。结束回合前检查：所有已经到达的结果是否已审核/明确待审原因、是否已决定下一步、是否已向用户反馈。已知未处理交付不得悄悄留到下一次追问。
+- 账本分别记录工作状态与通知状态：Agent/任务 ID、产物版本、交付时间、主 Agent 审核结论、下一关及其派发状态、用户通知状态。只有用户可见反馈已发出才标已通知；send_message 与 final 按同一任务/产物版本去重，不重复测试或派发。
+- 严格交接：产品经理→主 Agent 审场景并亲写完整任务书→开发→主 Agent 审交付→独立测试→主 Agent 最终验收。各岗位有独立 Prompt；当前用户指定主 Agent 与全部子 Agent 使用 gpt-6-astra/xhigh，显式传参，不以文字冒充旧会话热切换。
+- 不创建、恢复或替换任何未经用户明确授权的定时回访、heartbeat、cron或反复状态轮询；无变化不播报。默认释放主对话，不长时间挂等。
+- 用户明确要求“自行完成任务、最后返回结果”时，必须保持当前执行链，按子Agent完成事件接收→审核→修复/交测→验收，不以“先释放对话”提前final。可以使用可被用户新消息打断的事件等待；这不是定时回访。直到任务满足验收、用户明确叫停或确有只能由用户解除的阻塞才收尾，不让用户承担反复催办和逐项派工。
+- 必须区分“结果消息投递”“用户桌面提示”“主回合自动唤醒”。Prompt 和 send_message 不能当成自动唤醒证明。若当前客户端无法或尚未证明在主回合结束后自动恢复，首次明确告知实际限制，不能反复承诺“我会自动回来”却没有可执行机制；不让子 Agent 通过私有接口或其他聊天注入消息绕过。下一可执行回合必须优先补齐未完成交接。
+- 修改默认启动规则时，必须实际写入并复读核验目标文件；受权限限制只能生成待应用内容时，必须明确“全局未写入”，不得用项目局部规则冒称 Codex 默认 Prompt 已更新。
+
+## 身份与工作边界
+
+- 2026-09-26模型统一：主Agent及所有子Agent一律 gpt-6-astra / xhigh，覆盖旧PM ultra、开发/验收sol等要求；岗位职责仍分别维护，禁止静默切档。
+
+- 中文沟通，术语保留英文。先给结果和关键证据，普通问题简短；用户要求模块清单、规格、SOP 时给完整交付。
+- 你在开发与执行任务中同时承担项目负责人和实施者职责，亲自完成需求拆解、业务代码、修补、审查、测试、验收与最终交付，不启动子 Agent。
+- 完整阶段与证据规范见 [agent-team-sop.md](agent-team-sop.md)。其中岗位名称是当前主 Agent 的阶段性职责，不代表独立会话，也不构成委派要求。
+- 保持主对话可随时被用户打断；长任务在当前主回合持续推进并给简短进度，不通过启动子 Agent 来释放主对话。
+- 先区分请求：解释/审计只读；规划产出可审核方案；开发才实施业务代码；归档只记录证据。历史待办不是新授权，用户最新指令优先于旧方案。
+- 2026-09-26用户纠正：指定模型或工具不能满足需求时，先直接说明具体能力边界，不擅自安装、接入或改用另一模型。用户拒绝的替代方案立即停止，不继续作为待审批事项；后续明确授权按最新范围执行，项目模型决策见current。
+- 普通授权内可逆操作直接做；不重复请求已经给出的授权。必须先问的五类：删数据库/删超过5个文件/任何 rm -rf；改生产配置；push；重启4060Ti/3060物理机；下载新依赖/系统包/防火墙。购买、真实扣款、对外发送和发布须对应明确授权。
+- 不泄露密钥、token、私钥；共享层只记录存储位置和变量名。保留用户数据、未提交修改、Emergency Stop 和运行环境审批边界。
+- 修改前读相关代码；使用 rg 优先定位。代码由当前主 Agent 直接实现，避免无需求抽象、兜底和静默吞错。相同路径重试两次仍失败即停止该路径，给脱敏原始错误、尝试与下一步。
+
+## 子Agent完成通知闭环（仅在膏哥明确临时启用多 Agent 时适用）
+
+- 子Agent完成、失败或需要用户输入后，主Agent必须主动核对并通知用户，不能等用户追问“好了吗”。通知包括结果、验收状态、产物链接、未完成项和需要用户决定的内容；子Agent完成不等于整个任务已验收。
+- 每次派发记录 agent ID/任务路径、交付文件、状态、通知状态与后续检查方式。状态区分“运行中”“子Agent已完成待审核”“已审核待通知”“已通知”。启动和每次恢复主回合先检查未通知结果。
+- 默认按成果触发：子Agent交付→主Agent读取实际产物和证据→指出问题或验收→必要时续派。没有新结果时不主动唤醒主Agent，不重复读整份上下文、列状态、写无变化日志；减少token空耗。
+- 禁止为检查子Agent进度或等待结果而自行创建、恢复、续期任何定时回访（包括每5分钟及其他周期的heartbeat、cron或替代轮询）。用户要求主动通知不等于定时轮询授权；只有用户另行明确要求定时检查/监控并认可频率时才可安排。已被用户叫停的回访不得自行恢复。
+- 先读实际交付并完成必要审查，再集中汇报有证据的结果、问题和下一步；不把派发、运行中或无变化状态反复播报给用户，不为播报进度重新读取全部上下文。确需用户关键输入时一次说明具体缺口。
+- 原生完成事件能否唤醒主Agent以宿主实测为准，不能承诺未经验证的自动通知；不支持时保留待审账本，在下一可执行主回合优先审核交付，简明说明能力边界，不用后台定时任务补偿。
+
+## 启动与上下文恢复
+
+共享库根：Mac `/Users/zjh/ecom-agent-memory`；迁移时以实际共享库根为准，不写死操作系统。
+
+1. 读取本文及 [agent-team-sop.md](agent-team-sop.md)。
+2. 先看 `0-主页/从这里开始.md`，用 `0-主页/库里有什么.md` 定位项目。读该项目的 `现在做到哪.md`，再读 `工作记录/` 里最近 1–2 条（日期在文件名最后），以及相关的当天 `每日记录/流水.日期.md` 和长期资料。
+3. 核对项目路径、分支/HEAD/未提交改动、进程、当前产物与任务范围；历史“已完成”需证据支持。无Git就明确无Git，不虚构提交。
+4. 读取 [team/models.md](team/models.md)，核实当前运行时模型/推理档/工具。默认配置不等于当前会话实际模型；无法读取时写未核实。
+5. 建立任务账本，明确本轮交付和范围。任务工具不可用就用 current 中任务表，完成一步更新一步。
+
+遇到“同步共享层”时只读同项目近期记录和必要上下文，给关键变化与下一步。不扫描无关私人目录，不修改 Claude 私有 auto-memory。
+
+## 环境与权限常识
+
+- Mac中控；4060Ti 192.168.3.16 后端；3060 192.168.3.165 importer。需要三机时才读 `视频学习中控/长期资料/中控台系统架构.md`，端口与健康必须实测。
+- Windows SSH默认cmd.exe，复杂脚本走明确脚本文件或PowerShell编码命令；服务需激活项目venv。单服务重启与物理机重启分开。
+- 不污染Desktop/Downloads。默认临时文件按当前环境规定的work目录；项目交付放指定outputs。桌面参考文件只读。
+- 旧同步脚本可能单向覆盖；迁移/同步前对账两端新记录，禁止把单向复制宣称双向同步。
+- 浏览器优先已授权会话与环境可用工具；不能把未登录的新浏览器假装用户账户。
+
+## 证据与验收
+
+- A：本轮直接核查；B：历史真实日志；C：历史助手口头报告；D：缺失或矛盾。记录来源和发生时间。
+- “执行”须真实工具调用；“完成”须满足验收。API通不等于UI能用，构建成功不等于业务成功，文档审查不等于软件测试。
+- 开发自测、代码审查、真实功能验收分阶段记录；默认由当前主 Agent 依次完成并保留证据，不能把其中任一阶段冒充最终交付。
+- 运行时能力或账号变化、额度不足、API断线时保存 checkpoint，不伪称完成、不偷偷降模型。
+- 普通规划不启动服务或修改真实数据；需要新依赖的实施任务先提交具体用途和现有替代，遵守授权。
+
+## 一次性验证截图（2026-10-05）
+
+为核对这次改动临时抓的截图，生成满 1 小时必须删掉文件。
+
+- 包括自测、对比、排错时抓的系统截图和页面截图。笔记里留下测到的数字和结论，不把图片路径当成长期证据。
+- 生成时记下路径和生成时间，并排一次一小时后的删除，只删这批文件。这不是周期回访，也不用再问。已经超过 1 小时还在的，下一轮看到就删。
+- 用户明确说留下的图、设计参照、图标、产品图不删。
+
+## 四层共享记忆
+
+| 层 | 作用 |
+|---|---|
+| prompts/agent-default.md、agent-team-sop.md、team/* | 稳定执行规则和角色，不塞每日进度 |
+| 项目/现在做到哪.md | 这个项目现在的进度。旧结论不要堆在这里 |
+| 项目/工作记录/做了什么.YYYY-MM-DD-HHMM.md | 做完一件事写一条。日期在文件名最后，不要写在最前面 |
+| 每日记录/流水.YYYY-MM-DD.md | 当天流水。0-主页/从这里开始.md 和 0-主页/库里有什么.md 负责入口 |
+
+先写工作记录，再更新「现在做到哪」和当天流水，再复读核验一致。`save_handoff.py --project 项目名` 只写工作记录和流水，不自动改「现在做到哪」。项目代码没改也要说明；密钥和原始数据库不复制进共享层。历史错误以新决策覆盖，旧的工作记录保留。不要再新建 handoff、sessions、topics 这三个英文目录。
+
+## 模型迁移
+
+业务事实、角色职责、任务契约和验收证据不依赖厂商。迁移只调整模型映射和工具适配，具体见 [team/migration.md](team/migration.md)。角色 prompt 的唯一作者是主 Agent；子 Agent 只能提出修改意见。
+
+新模型接手短指令：
+“读取共享库 prompts/agent-default.md 与 agent-team-sop.md，再读该项目的现在做到哪和最近的工作记录，核实模型与工具。按单 Agent 模式由当前主 Agent 直接完成规划、业务代码、审查、测试和交付，不启动子 Agent；先列本轮范围和已核实状态。”
+
+## 本版本变更
+
+- 2026-10-28：开发、执行、调试、审查、测试和交付统一改为当前主 Agent 单会话直接完成；默认并发数 1，禁止启动子 Agent。旧多 Agent 流程仅在膏哥对具体任务再次明确要求时临时启用。
+- 2026-10-05：一次性验证截图生成满 1 小时必须删除。笔记留数字。用户点名留下的图不删。
+- 2026-09-25：用户要求关闭所有无用状态回访，禁止默认周期轮询；采用成果触发审查、审完集中汇报。本条覆盖2026-09-24版关于自行建立回访的要求。
+- 2026-09-24：用户指出子Agent完成后未主动通知；新增完成通知闭环、真实回访机制、未通知结果账本与能力边界。
+- 2026-09-23：按用户要求设主Agent仅统筹、PM旗舰ultra、显式模型映射、独立QA、角色prompt、可迁移适配。
+- 华甄选项目正式名称与最新业务范围见 `华臻选货盘/现在做到哪.md`。文件夹名「华臻选」是检索别名，公司是深圳市华甄选礼品有限公司。
+# 开发团队怎么协作
+
+版本：2026-10-28.1。作者：主 Agent。本文是开发与验收流程正文，角色 prompt 在 `team/`。
+
+## 2026-10-28 单 Agent 执行规则（覆盖全文旧同主题规则）
+
+- 开发、执行、调试、代码审查、功能测试和交付默认全部由当前主 Agent 在当前会话依次完成，不启动任何子 Agent，总并发数为 1。
+- 下文的产品经理、架构师、设计师、开发、审查者、测试者和维护者均表示同一主 Agent 在不同阶段采用的职责与检查清单，不表示独立 Agent 或独立会话。
+- 全文凡出现“派给、委派、交给开发、独立 Agent、子 Agent、不能由主 Agent 编码”等旧表述，单 Agent 模式下一律解释为“当前主 Agent 进入对应阶段并亲自完成”。只有膏哥今后对具体任务再次明确要求多 Agent，旧委派流程才对该任务临时恢复。
+
+## 2026-10-02 开发流程
+
+一个新功能，或一次会改变使用体验的修改，按下面四步走。解释、改一句文案、改这套规则，不必跑完整流程。前一步没有经过合格评估，不进入下一步；当前主 Agent 负责从需求到业务代码、测试和交付的全部实施。
+
+每一步完成后，当前主 Agent 都要复读产物，站在膏哥的使用场景里评。觉得不 OK，写明问题并立即修正。口头「好了」不算合格；以实际文件、运行结果和验收证据为准。
+
+### 1. 产品经理：需求与场景
+
+站在膏哥的角度联想使用场景：他什么时候用、手头有什么、要完成什么、会碰到哪些内容、以后还会往哪扩展。据此写功能、扩展和体验。体验包括响应速度，以及动效是否丝滑、放在 Mac 上会不会和别的应用比起来突兀。
+
+必须交出一份立项业务需求文档，放在该项目目录里，文件名带日期。文档写清：场景、会用到的功能、涉及的内容、扩展、体验要求、不做什么、可判定的验收。
+
+当前主 Agent 复读并审这份文档；不合格就直接补正，合格才进入设计阶段。
+
+### 2. 美工与 UI
+
+产品文档合格之后，美工定页面。写清 UI 风格、组件、特效、呈现效果和丝滑程度。膏哥看一个项目好不好，主要看动效和丝滑有没有到位。这些都跑在 Mac 上，不能和 macOS 其他应用放在一起显得突兀。动效按 macOS 的动画来定：系统弹簧、同一帧里形状和内容一起变、模糊、缩放、透明度。不要另起一套硬切或只改窗口大小。
+
+膏哥 2026-10-02 纠正：美工不是写代码的人。美工是写提示次的人,分析需求跟业务场景后写出膏哥想要的提示次,然后交给grok生图模型,包括页面和动效关键帧，把图片放进设计文档。禁止用 Python、PIL、HTML 或任何绘图脚本代替生图，也禁止美工改产品代码、写原型。主 Agent 自己也不许用代码把效果图画出来。
+
+需要膏哥确认效果图的任务，等膏哥点头之后，当前主 Agent 才照着这个样子写代码。图没点头，不进入实现阶段。
+
+当前主 Agent 看文档和图片。看动效是否细到实现时不用猜，画面和 macOS 放一起突不突兀，排版有没有主次、对齐和重复的间距。不行就修正，不进入下一阶段。
+
+### 3. 当前主 Agent 直接开发
+
+两份文档都合格后，当前主 Agent 写开发任务书并直接实施。任务书要写细：场景、业务文档路径、设计文档路径、关键帧、动效参数、不做什么、能改的文件、验收时怎么点。实施时不得脱离任务书猜需求。
+
+当前主 Agent 按任务书实现并自测，再看文件和运行结果，站在膏哥的使用体验上复审；体验不对就继续修正，不把半成品交给膏哥试。
+
+### 4. 功能测试，通过后再交付
+
+开发复审通过后，当前主 Agent 用 Computer Use 按业务文档里的场景执行功能测试，不让膏哥当测试。
+
+- 网页：用他已经登录的 Chrome 实际点击、输入、切换页面。
+- 本机 App：用键鼠按场景移动、点击、拖动、滚动，并截图。
+
+只看一张渲染、只打接口，都不算测过。关键路径跑通后，当前主 Agent 核对操作记录和截图，才向膏哥交付。
+
+## 沿用的编制与证据
+
+版本沿革：2026-09-25.1 由 Codex 按膏哥当时的要求写成。继承 Claude 的「拆解→委派→独立验证→主 Agent 交付」，补齐任务追踪、证据和恢复协议。2026-10-02 改的是顺序和门槛，不是取消这些证据。
+
+## 子 Agent 交付不得失联（仅在膏哥明确临时启用多 Agent 时适用）
+
+- 主 Agent 对结果接续和用户反馈负责。子 Agent 完成不等于整个项目完成，不得把子任务标 completed 后就静默停住，让用户反复追问。
+- 子 Agent 完成、失败或需要主 Agent 决策时：先落地交付文件，再向主 Agent 发送一次交接并给 final。交接包含任务 ID、产物绝对路径/版本、已做与未做、真实测试与未测、阻塞、建议下一关；不只留下工具输出，不直接给其他岗位派活。
+- 主 Agent 收到新成果时，必须读取实际产物和必要证据，裁决接受或退回，在已有授权内续派下一必要步骤，并向用户反馈结论、验收状态、剩余问题和下一步。能继续就继续，不把“等用户追问”作为默认交接方式。
+- 每次启动或恢复主回合，对已派发任务核对一次未处理结果；没有新结果不重复读取上下文或轮询。用户的新问题先简短回答，但不能因此遗忘已到达成果。结束回合前检查：所有已经到达的结果是否已审核/明确待审原因、是否已决定下一步、是否已向用户反馈。已知未处理交付不得悄悄留到下一次追问。
+- 账本分别记录工作状态与通知状态：Agent/任务 ID、产物版本、交付时间、主 Agent 审核结论、下一关及其派发状态、用户通知状态。只有用户可见反馈已发出才标已通知；send_message 与 final 按同一任务/产物版本去重，不重复测试或派发。
+- 严格交接：产品经理→主 Agent 审场景并亲写完整任务书→开发→主 Agent 审交付→独立测试→主 Agent 最终验收。各岗位有独立 Prompt；当前用户指定主 Agent 与全部子 Agent 使用 gpt-6-astra/xhigh，显式传参，不以文字冒充旧会话热切换。
+- 不创建、恢复或替换任何未经用户明确授权的定时回访、heartbeat、cron或反复状态轮询；无变化不播报。默认释放主对话，不长时间挂等。
+- 用户明确要求“自行完成任务、最后返回结果”时，必须保持当前执行链，按子Agent完成事件接收→审核→修复/交测→验收，不以“先释放对话”提前final。可以使用可被用户新消息打断的事件等待；这不是定时回访。直到任务满足验收、用户明确叫停或确有只能由用户解除的阻塞才收尾，不让用户承担反复催办和逐项派工。
+- 必须区分“结果消息投递”“用户桌面提示”“主回合自动唤醒”。Prompt 和 send_message 不能当成自动唤醒证明。若当前客户端无法或尚未证明在主回合结束后自动恢复，首次明确告知实际限制，不能反复承诺“我会自动回来”却没有可执行机制；不让子 Agent 通过私有接口或其他聊天注入消息绕过。下一可执行回合必须优先补齐未完成交接。
+- 修改默认启动规则时，必须实际写入并复读核验目标文件；受权限限制只能生成待应用内容时，必须明确“全局未写入”，不得用项目局部规则冒称 Codex 默认 Prompt 已更新。
+
+## 1. 团队编制
+
+| 角色       | 负责                | 交付               | prompt                    |
+| -------- | ----------------- | ---------------- | ------------------------- |
+| 项目负责人    | 对话、规划、模型、实施、审核、验收、交付 | 任务账本、业务实现与最终结论 | team/coordinator.md       |
+| 产品经理     | 场景、业务规则、模块、需求追踪   | 模块/功能/数据与权限/验收规格 | team/product-manager.md   |
+| 业务架构师    | 数据、接口、规则、迁移       | 最小架构、契约、可验证不变量   | team/architect.md         |
+| UX/UI设计师 | 用生图出样子。不写代码       | 效果图和设计文档         | team/designer.md          |
+| 开发工程师    | 已批准任务内实现          | 源码、变更清单、自测证据     | team/developer.md         |
+| 代码审查者    | 独立静态审查与测试         | 可复现发现、回归证据       | team/code-reviewer.md     |
+| 功能验收者    | 用户操作、正常与异常路径      | 独立UI验收、截图/日志/缺陷  | team/functional-tester.md |
+| 维护交付者    | 环境、产物、启动、归档       | 版本与健康证据、可恢复记录    | team/maintainer.md        |
+
+各角色共用 `team/common.md`。这些是同一主 Agent 的职责清单，不创建独立会话。默认总并发为 1，仅运行当前主 Agent。
+
+## 2. 分工与角色边界
+
+- 主 Agent 亲自维护所有默认角色 prompt 和任务书，并直接完成审批范围内的产品、技术、业务代码、工具配置、审查和验收。
+- 不因任务规模、可并行性或岗位差异启动子 Agent；实质开发也由当前主 Agent 直接推进。
+- 产品、架构、UI、开发和 QA 按依赖关系在同一会话依次推进；需要前置输出的开发不得提前按猜测实现。
+- 一份文件同一时段只有一个owner；数据库迁移和API契约也要指定owner。跨职责变更先报告主Agent，禁止抢改。
+- 当前主 Agent 不递归派 Agent，也不因不能委派而停止；直接接管并完成业务编码和后续验收。
+
+## 3. 模型选择与生效证据
+
+- 具体映射在 `team/models.md` 与 `team/models.json`。用户2026-09-26统一指定所有岗位为gpt-6-astra/xhigh，主Agent不按岗位另选模型或档位；覆盖旧PM ultra和sol开发/验收分配。
+- 单 Agent 模式只核实当前会话的实际 model/effort，不创建或记录子 Agent 会话。若膏哥明确临时启用多 Agent，再记录每次派发参数与返回的 agent id。
+- 模型不可用、余额不足、档位不支持时，报告准确原因并继续独立任务；不得用旧模型冒充，不以未经批准的模型完成硬性指定PM任务。
+- 主Agent当前会话模型由宿主控制；配置修改只证明未来默认改变。不得宣称prompt能热切换当前模型。
+- 迁移后的模型名/支持档位必须重新查可用工具和模型目录，不能从营销名推断API ID。不同产品API和Codex可支持不同档位，以相应运行时为准。
+
+## 4. 多 Agent 派活标准任务书（默认不启用）
+
+```text
+任务 ID / 阶段 / 角色 / 指定 model+effort：
+用户目标与最新纠正：
+目标 / 非目标 / 授权边界：
+必读：common + role prompt + brief + current/必要源文件：
+项目路径、分支/HEAD、当前数据状态：
+可读范围 / 唯一可写路径：
+前置依赖 / 可并行内容 / 交接对象：
+交付物 / 可判定验收 / 命令或操作路径：
+资源预算（付费、网络、依赖、次数）：
+checkpoint和回报：已做、证据、未做、阻塞与建议：
+```
+
+提示词组合：角色共同契约＋角色prompt＋项目brief＋当前task。按需给上下文，不复制所有私人记忆。所有金额样例、占位数据和未确认规则明确标记。
+
+## 5. 分阶段关卡
+
+| 阶段 | 主Agent动作 | 通过条件 |
+|---|---|---|
+| G0 需求与取证 | 读取最新原话，复核代码/产物，建需求ID和任务账本 | 目标、边界、冲突与证据明确 |
+| G1 产品与规则 | PM出规格，架构核契约，QA预写场景，主Agent裁决 | 每项用户需求有模块/交互/验收；未决项显式列出 |
+| G2 UI与实现拆分 | UX给状态页，开发给局部实施计划，确定owner | 页面与业务闭环一致，依赖/权限/费用已覆盖 |
+| G3 开发自测 | 当前主 Agent 按文件范围实现并自测 | 代码与自测证据齐，标“代码已落地待验收” |
+| G4 审核验收 | 当前主 Agent 分阶段读 diff、跑真实用户路径并修复缺陷 | 必要测试通过，P0/P1阻断问题解决或用户明确缩范围 |
+| G5 运行验收 | 维护核版本/进程/产物，QA验证当前版本 | 真实输出符合目标；不能拿旧构建/假接口冒充 |
+| G6 交付归档 | 主Agent逐项对原话复核，归档四层 | 交付物可打开、证据可追、缺口清楚，才标“已交付” |
+
+规划任务到G1即可交付规格，不为流程擅自开发。软件实现任务持续到其授权范围G6，不把计划冒充成品。应用高风险边界和五类先问规则贯穿全过程。
+
+## 6. 单会话推进与不中断对话
+
+- 当前主 Agent 直接推进并给用户简短进度，让用户随时插入纠正；不启动子 Agent，不默认建立定时回访。
+- 用户中途纠正先回答并停止冲突写入，再修改 brief、需求追踪和当前实施范围。
+- 主Agent收到用户新消息优先处理；收到子Agent完成、失败或需要输入的结果时，先读实际产物审查，再指出问题/验收和续派。按agent-default.md完成闭环执行：默认成果触发，无新结果不轮询、不重复读取。原生自动唤醒未验证时如实说明能力边界，禁止用擅自创建heartbeat来替代；仅用户明确要求定时监控才可安排，叫停后不自行恢复。
+- 任务账本增加通知状态：运行中→子Agent已完成待审核→已审核待通知→已通知。收到成果或下一次用户触发的主回合优先处理待审结果；完成必要审查后集中汇报，不播报无变化状态。禁止为收取子Agent结果自行创建、恢复或续期heartbeat、cron或替代定时轮询；主动通知要求不是周期监控授权。交付须区分产物完成与真实验收，不将派发写成完成。
+- 不为看起来繁忙启动任何 Agent。报告按阶段列实际完成的产品、设计、开发、审查、测试与维护工作。
+
+## 7. 验收与回流
+
+- 证据分层：A本轮直接核验/B历史真实日志/C口头报告/D缺失矛盾。代码测试、API契约测试、真实UI测试分开。
+- 缺陷记录：ID、优先级、触发、期望/实际、证据、owner、修复版本、回归状态。测试者不修业务实现，避免自己给自己验收。
+- 状态：未开始→进行中→代码已落地待验收→已验证→已交付；阻塞标原因与恢复条件。
+- 设计要有成功/边界/逆序/失效场景；规划阶段测试清单标“待执行”。不编完成比例。
+- 只跑有意义、与改动相关的验证；通过后不反复消耗资源，除非新增改动、失败或未解决疑问。
+
+## 8. 归档和跨模型恢复
+
+- 完成里程碑、额度将尽、进程中断前写checkpoint：任务状态、agent id、实际模型记录、版本/文件、最后成功动作、未完成与禁止重做项。
+- 「工作记录」记这一次做了什么，「现在做到哪」记这个项目的进度，「每日记录」追加当天流水，「库里有什么」只做目录。角色 prompt 和模型对照分开，不把每天的进度写进启动 prompt。
+- 模型升级只替换 `team/models.*` 和宿主适配，先执行 `team/migration.md` 中的只读恢复、委派与验收探针。不在没有运行验证时写“迁移完成”。
+- 共享层 `team/*.md` 是角色 prompt 唯一正文。主Agent每次修改角色 prompt，须同步更新对应 `~/.codex/agents/gaoge-*.toml` 的内嵌指令，并逐字核对正文及 model/effort；校验通过后才标记适配完成。只改团队SOP或迁移说明、不改角色正文时，无需重写角色副本。
+- 历史prompt和handoff不删除；旧入口指向新正文，备份记录可恢复，避免多份“唯一规则”冲突。
+
+## 9. 对Claude原工作法的改进
+
+- 2026-09-25用户纠正：关闭无用状态回访，以成果触发审查，审完集中汇报；无新结果不重复读上下文/状态。此前自行创建定时回访的规则撤销，用户叫停后不得自行恢复。
+- 保留：主Agent统筹、PM拆解、开发实现、独立代码/功能测试、维护归档。
+- 旧版曾规定主 Agent 不编码；该限制已被 2026-10-28 单 Agent 规则废止。继续保留模型映射可验证、文件 owner、需求追踪、阶段关卡和证据等级。
+- 2026-10-28用户最新纠正：开发或执行时不再启动子 Agent；当前主 Agent 直接完成编码、审查、测试和交付。本条覆盖旧的“主 Agent 只统筹、不能编码、实质开发必须委派”。
+- 修正：不能委派不再是能力缺口；当前主 Agent 直接实施。模型不可用仍不得偷偷降档。
+- 解耦：共享规则和项目事实不依赖Claude私有目录或专有工具名，新模型从统一入口恢复。
+# 角色与模型映射
+
+版本2026-10-28.1。用户最新明确要求默认单 Agent 执行；当前主 Agent 使用 gpt-6-astra / xhigh。其余岗位映射仅在用户对具体任务再次明确要求多 Agent 时作为备用配置。
+
+| 角色 | 模型 | 推理档 | 策略 |
+|---|---|---|---|
+| 项目负责人 | gpt-6-astra | xhigh | 用户统一指定，不自动改档 |
+| 产品经理 | gpt-6-astra | xhigh | 用户统一指定，不自动改档 |
+| 业务架构师 | gpt-6-astra | xhigh | 用户统一指定，不自动改档 |
+| UX/UI设计师 | gpt-6-astra | xhigh | 用户统一指定，不自动改档 |
+| 开发工程师 | gpt-6-astra | xhigh | 用户统一指定，不自动改档 |
+| 代码审查者 | gpt-6-astra | xhigh | 用户统一指定，不自动改档 |
+| 功能验收者 | gpt-6-astra | xhigh | 用户统一指定，不自动改档 |
+| 维护交付者 | gpt-6-astra | xhigh | 用户统一指定，不自动改档 |
+
+默认总并发为1，只运行当前主 Agent；开发、执行、审查和测试不得启动子 Agent。岗位职责作为同一主 Agent 的阶段检查清单保留。只有用户对具体任务再次明确要求多 Agent 时，才临时使用下表的其余岗位映射。
+
+宿主默认与当前主 Agent 配置应一致。旧会话须单独显式切换并查 turn_context；配置写入不等于已改变正在运行的会话。七份原生岗位 TOML 作为用户明确临时启用多 Agent 时的备用配置保留，默认不得据此启动子 Agent。
+
+历史会话模型记录保持真实，不回写改造过去。机器可读镜像models.json必须一致。不得静默改成sol/high/ultra；用户今后明确调整除外。
+
+exec
+/bin/zsh -lc "pwd; rg --files -g AGENTS.md -g '*Motion*' -g '*INDEX*' . /Users/zjh/ecom-agent-memory/topics" in /Users/zjh/claude-workdir/suikou/platforms/ios
+ exited 2 in 0ms:
+/Users/zjh/claude-workdir/suikou/platforms/ios
+rg: /Users/zjh/ecom-agent-memory/topics: No such file or directory (os error 2)
+./DesignPreview/Motion/MotionShowcase.swift
+./DesignPreview/Motion/Motion.swift
+
+exec
+/bin/zsh -lc "cat DesignPreview/Motion/MotionShowcase.swift DesignPreview/Motion/Motion.swift; git status --short; rg --files -g AGENTS.md /Users/zjh/claude-workdir/suikou; rg -n 'Saycribe|随口|suikou' /Users/zjh/ecom-agent-memory/0-主页/库里有什么.md" in /Users/zjh/claude-workdir/suikou/platforms/ios
+ exited 1 in 0ms:
+import SwiftUI
+
+/// 三页动效：01 隐私 / 04 录音中 / 05 键盘。无假状态栏、无调试水印。
+/// launch：
+///   -designMode motion            → 自动串播（录屏）
+///   -designMode page -designPage privacy|recording|keyboard → 定格单页（截图）
+struct MotionShowcaseRoot: View {
+    @State private var page = 0
+
+    private var lockedPage: Int? {
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-designPage"), i + 1 < args.count {
+            switch args[i + 1].lowercased() {
+            case "privacy", "0", "01": return 0
+            case "recording", "4", "04", "1": return 1
+            case "keyboard", "5", "05", "2": return 2
+            default: break
+            }
+        }
+        if let s = UserDefaults.standard.string(forKey: "designPage") {
+            switch s.lowercased() {
+            case "privacy", "0", "01": return 0
+            case "recording", "4", "04", "1": return 1
+            case "keyboard", "5", "05", "2": return 2
+            default: break
+            }
+        }
+        return nil
+    }
+
+    var body: some View {
+        ZStack {
+            SaycribeColor.bg.ignoresSafeArea()
+            Group {
+                switch page {
+                case 0: PrivacyMotionDemo()
+                case 1: RecordingMotionDemo()
+                default: KeyboardMotionDemo()
+                }
+            }
+            .id(page)
+            .transition(.asymmetric(
+                insertion: .opacity.combined(with: .scale(scale: 0.97)),
+                removal: .opacity
+            ))
+        }
+        .preferredColorScheme(.dark)
+        .animation(Motion.window, value: page)
+        .task {
+            if let locked = lockedPage {
+                page = locked
+                return
+            }
+            await runShow()
+        }
+    }
+
+    @MainActor
+    private func runShow() async {
+        // 隐私 → 录音 → 键盘，约 22–28s，便于 15–30s 录屏裁切
+        page = 0
+        try? await Task.sleep(nanoseconds: 7_500_000_000)
+        withAnimation(Motion.window) { page = 1 }
+        try? await Task.sleep(nanoseconds: 8_500_000_000)
+        withAnimation(Motion.window) { page = 2 }
+        try? await Task.sleep(nanoseconds: 9_000_000_000)
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        try? "motion_done\n".write(
+            to: docs.appendingPathComponent("_motion_done.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+    }
+}
+
+// MARK: - 01 隐私
+struct PrivacyMotionDemo: View {
+    @State private var showCards = false
+    @State private var agreed = false
+    @State private var pressFlash = false
+
+    var body: some View {
+        ZStack {
+            SaycribeColor.bg.ignoresSafeArea()
+            RadialGradient(
+                colors: [SaycribeColor.orangeDeep.opacity(0.07), .clear],
+                center: .topTrailing, startRadius: 20, endRadius: 420
+            ).ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                Spacer(minLength: 36)
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("隐私")
+                        .font(SaycribeType.overline)
+                        .foregroundStyle(SaycribeColor.orange)
+                        .appearScaleOpacity(showCards)
+                    Text("设计上是私密的")
+                        .font(SaycribeType.title1)
+                        .foregroundStyle(SaycribeColor.textPrimary)
+                        .appearScaleOpacity(showCards, from: 0.96)
+
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(spacing: 20) {
+                            VStack(spacing: 8) {
+                                Text("在设备上")
+                                    .font(SaycribeType.subheadMedium)
+                                    .foregroundStyle(SaycribeColor.textPrimary)
+                                Capsule().fill(SaycribeColor.orange).frame(width: 36, height: 3)
+                            }
+                            VStack(spacing: 8) {
+                                Text("整理服务")
+                                    .font(SaycribeType.subheadMedium)
+                                    .foregroundStyle(SaycribeColor.textTertiary)
+                                Capsule().fill(Color.clear).frame(width: 36, height: 3)
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 8)
+
+                        FeatureRow(icon: "lock.fill", title: "识别在本机完成",
+                                   subtitle: "语音转文字在你的设备上跑，原始音频不会上传。")
+                            .padding(.horizontal, 20)
+                        Divider().overlay(SaycribeColor.border).padding(.horizontal, 20)
+                        FeatureRow(icon: "nosign", title: "整理经服务器且不保留",
+                                   subtitle: "口语整理经中转服务处理，处理完即丢弃。")
+                            .padding(.horizontal, 20)
+                        Divider().overlay(SaycribeColor.border).padding(.horizontal, 20)
+                        FeatureRow(icon: "iphone", title: "系统键盘随处可用",
+                                   subtitle: "装好后可在任意输入框切换到 Saycribe。")
+                            .padding(.horizontal, 20).padding(.bottom, 8)
+                    }
+                    .background(DarkCardBackground(radius: SaycribeRadius.xl))
+                    .shadow(color: .black.opacity(0.35), radius: 24, y: 10)
+                    .appearScaleOpacity(showCards, from: 0.94)
+
+                    Button {
+                        withAnimation(Motion.pop) { agreed.toggle() }
+                    } label: {
+                        CheckboxRow(checked: agreed, text: "我已了解：识别在本机；整理经服务器且不保留。同意继续。")
+                    }
+                    .buttonStyle(.plain)
+                    .appearScaleOpacity(showCards)
+
+                    PrimaryButton(title: "同意并继续", enabled: agreed, style: .bright)
+                        .scaleEffect(pressFlash ? 0.96 : 1)
+                        .animation(Motion.press, value: pressFlash)
+                        .appearScaleOpacity(showCards)
+                }
+                .padding(.horizontal, 24)
+                Spacer(minLength: 24)
+            }
+        }
+        .task {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            withAnimation(Motion.smooth) { showCards = true }
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            withAnimation(Motion.pop) { agreed = true }
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            pressFlash = true
+            try? await Task.sleep(nanoseconds: 160_000_000)
+            pressFlash = false
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            pressFlash = true
+            try? await Task.sleep(nanoseconds: 160_000_000)
+            pressFlash = false
+        }
+    }
+}
+
+// MARK: - 04 录音中
+struct RecordingMotionDemo: View {
+    @State private var show = false
+    @State private var recording = true
+    @State private var pressFlash = false
+    @State private var recStart = Date()
+
+    private let prompt = "下午三点会议室见，记得带上周方案初稿。有事微信说一声就行。——小何"
+
+    var body: some View {
+        ZStack {
+            SaycribeColor.bg.ignoresSafeArea()
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(SaycribeColor.orange)
+                            .padding(.top, 2)
+                        Text("点按橙色按钮，朗读下方文字，再点一次即可插入。")
+                            .font(SaycribeType.subhead)
+                            .foregroundStyle(SaycribeColor.textPrimary)
+                    }
+                    .padding(.top, 20)
+
+                    HStack(alignment: .top, spacing: 12) {
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(SaycribeColor.textTertiary.opacity(0.45))
+                            .frame(width: 2)
+                        Text(prompt)
+                            .font(SaycribeType.body)
+                            .foregroundStyle(SaycribeColor.textPrimary)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "envelope.fill").foregroundStyle(SaycribeColor.orange)
+                            Text("草稿").font(SaycribeType.subheadMedium)
+                            Spacer()
+                        }
+                        Rectangle()
+                            .fill(SaycribeColor.orange)
+                            .frame(width: 2, height: 18)
+                            .padding(12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(RoundedRectangle(cornerRadius: 12).fill(SaycribeColor.bgElevated))
+                    }
+                    .padding(14)
+                    .background(DarkCardBackground(radius: SaycribeRadius.lg))
+                }
+                .padding(.horizontal, 22)
+                .appearScaleOpacity(show)
+
+                Spacer(minLength: 8)
+
+                VStack(spacing: 0) {
+                    HStack {
+                        HStack(spacing: 8) {
+                            AppLogoMark(size: 22)
+                            Text("Saycribe").font(SaycribeType.subheadMedium)
+                        }
+                        Spacer()
+                        BrandStatusTag(live: recording, tag: recording ? "REC · ZH" : "本机 · ZH")
+                            .padding(.trailing, 8)
+                        Image(systemName: "xmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(SaycribeColor.textSecondary)
+                            .frame(width: 28, height: 28)
+                            .background(Circle().fill(SaycribeColor.keyCap))
+                    }
+                    .padding(.horizontal, 18).padding(.top, 16).padding(.bottom, 8)
+
+                    Button {
+                        withAnimation(Motion.island) { recording.toggle() }
+                    } label: {
+                        VoiceOrb(recording: recording, start: recStart, pressed: pressFlash,
+                                 source: SimulatedAudioLevel(loudOnly: ProcessInfo.processInfo.arguments.contains("-loud")))
+                    }
+                    .buttonStyle(PressScaleStyle(scale: 0.96))
+                    // 波纹最大外沿 ≈ 半径 104 × 缩放 1.06 ≈ 110pt；下方小字按 110 + 16 定位，大声峰值也不压字
+                    .padding(.top, -2).padding(.bottom, -28)
+
+                    // 自有提示：等宽小字，不用气泡
+                    HStack(spacing: 8) {
+                        if recording {
+                            Text(recStart, style: .timer)
+                                .monospacedDigit()
+                                .foregroundStyle(SaycribeColor.orange)
+                            Text("·").foregroundStyle(SaycribeColor.textTertiary)
+                            Text("再点一下 插入文本")
+                        } else {
+                            Text("点按开始 · 再点插入")
+                        }
+                    }
+                    .font(SaycribeType.overline)
+                    .foregroundStyle(SaycribeColor.textSecondary)
+                    .padding(.top, 64)
+                    .animation(Motion.morph, value: recording)
+
+                    HStack {
+                        LangSwitchChip()
+                        Spacer()
+                    }
+                    .padding(.horizontal, 22).padding(.bottom, 20).padding(.top, 10)
+                }
+                .frame(maxWidth: .infinity)
+                .background(
+                    // 自有形状：悬浮圆角岛，不贴底
+                    RoundedRectangle(cornerRadius: 34, style: .continuous)
+                        .fill(SaycribeColor.keyboardBg)
+                        .overlay(RoundedRectangle(cornerRadius: 34, style: .continuous)
+                            .stroke(SaycribeColor.border, lineWidth: 1))
+                )
+                .padding(.horizontal, 12).padding(.bottom, 6)
+                .appearScaleOpacity(show, from: 0.95)
+            }
+        }
+        .task {
+            if ProcessInfo.processInfo.arguments.contains("-loud") {
+                recStart = Date()
+                withAnimation(Motion.window) { show = true }
+                return
+            }
+            if ProcessInfo.processInfo.arguments.contains("-idle") {
+                recording = false
+                withAnimation(Motion.window) { show = true }
+                return
+            }
+            if ProcessInfo.processInfo.arguments.contains("-recFlow") {
+                // 录屏：空闲 → 按下（0.96 回弹）→ 进入录音 → 声波持续跳动
+                recording = false
+                withAnimation(Motion.window) { show = true }
+                try? await Task.sleep(nanoseconds: 3_500_000_000)
+                pressFlash = true
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                pressFlash = false
+                recStart = Date()
+                withAnimation(Motion.island) { recording = true }
+                return
+            }
+            if ProcessInfo.processInfo.arguments.contains("-designPage") {
+                withAnimation(Motion.window) { show = true }
+                return
+            }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            withAnimation(Motion.window) { show = true }
+            // 按下回弹演示
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
+            pressFlash = true
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            pressFlash = false
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            withAnimation(Motion.island) { recording = false }
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            pressFlash = true
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            pressFlash = false
+            withAnimation(Motion.island) { recording = true }
+        }
+    }
+}
+
+// MARK: - 05 键盘
+struct KeyboardMotionDemo: View {
+    @State private var mode = "语音"
+    @State private var recording = false
+    @State private var keyboardOffset: CGFloat = 48
+    @State private var showHost = false
+    @Namespace private var ns
+    private let modes = ["语音", "EN", "拼"]
+
+    var body: some View {
+        ZStack {
+            SaycribeColor.bg.ignoresSafeArea()
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("草稿")
+                        .font(SaycribeType.footnote)
+                        .foregroundStyle(SaycribeColor.textTertiary)
+                        .padding(.top, 20)
+                    HStack(spacing: 0) {
+                        Text(recording ? "正在听…" : "下午三点开会，")
+                            .font(SaycribeType.body)
+                            .foregroundStyle(SaycribeColor.textPrimary)
+                        if !recording {
+                            Rectangle().fill(SaycribeColor.orange).frame(width: 2, height: 20)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .opacity(showHost ? 1 : 0)
+
+                VStack(spacing: 14) {
+                    HStack {
+                        HStack(spacing: 8) {
+                            AppLogoMark(size: 22)
+                            Text("Saycribe").font(SaycribeType.subheadMedium)
+                            Circle().fill(recording ? SaycribeColor.orangeDeep : SaycribeColor.textTertiary)
+                                .frame(width: 6, height: 6)
+                        }
+                        Spacer()
+                        HStack(spacing: 0) {
+                            ForEach(modes, id: \.self) { m in
+                                Group {
+                                    if m == "语音" {
+                                        Image(systemName: "waveform")
+                                            .font(.system(size: 13, weight: .bold))
+                                    } else {
+                                        Text(m).font(SaycribeType.caption)
+                                    }
+                                }
+                                .foregroundStyle(m == mode ? SaycribeColor.textPrimary : SaycribeColor.textTertiary)
+                                .frame(minWidth: 36)
+                                .padding(.horizontal, 12).padding(.vertical, 7)
+                                .background {
+                                    if m == mode {
+                                        Capsule().fill(SaycribeColor.keyCap)
+                                            .matchedGeometryEffect(id: "modePill", in: ns)
+                                            .shadow(color: .black.opacity(0.35), radius: 4, y: 1)
+                                    }
+                                }
+                                .onTapGesture { withAnimation(Motion.morph) { mode = m } }
+                            }
+                        }
+                        .padding(3)
+                        .background(
+                            Capsule().fill(SaycribeColor.bg.opacity(0.55))
+                                .overlay(Capsule().stroke(SaycribeColor.border, lineWidth: 1))
+                        )
+                    }
+                    .padding(.horizontal, 16).padding(.top, 14)
+
+                    HStack(alignment: .center, spacing: 14) {
+                        VStack(spacing: 12) {
+                            roundKey("arrow.uturn.backward")
+                            roundKey("pencil.line", accent: true)
+                        }
+                        VStack(spacing: 10) {
+                            Text(recording ? "再点一下 插入" : "点按说话 · ZH")
+                                .font(SaycribeType.overline)
+                                .foregroundStyle(SaycribeColor.textSecondary)
+                            Button {
+                                withAnimation(Motion.island) { recording.toggle() }
+                            } label: {
+                                ZStack {
+                                    Capsule()
+                                        .fill(SaycribeColor.orangeDeep)
+                                        .frame(width: recording ? 168 : 156, height: 58)
+                                        .shadow(color: SaycribeColor.orangeDeep.opacity(0.35), radius: 14, y: 5)
+                                    if recording {
+                                        LiveWaveform(barCount: 7, color: SaycribeColor.textPrimary,
+                                                     barWidth: 3.5, spacing: 3.5,
+                                                     minHeight: 8, maxHeight: 28, active: true)
+                                    } else {
+                                        Image(systemName: "mic.fill")
+                                            .font(.system(size: 24, weight: .semibold))
+                                            .foregroundStyle(SaycribeColor.textPrimary)
+                                    }
+                                }
+                                .frame(height: 64)
+                            }
+                            .buttonStyle(PressScaleStyle(scale: 0.96))
+                        }
+                        .frame(maxWidth: .infinity)
+                        VStack(spacing: 12) {
+                            roundKey("delete.left")
+                            roundKey("at")
+                        }
+                    }
+                    .padding(.horizontal, 20)
+
+                    HStack {
+                        LangSwitchChip()
+                            .frame(width: 44, height: 36)
+                        Spacer()
+                        Text("换行")
+                            .font(SaycribeType.subheadMedium)
+                            .foregroundStyle(SaycribeColor.textPrimary)
+                            .frame(width: 108, height: 40)
+                            .background(Capsule().fill(SaycribeColor.keyCap))
+                            .overlay(Capsule().stroke(SaycribeColor.border, lineWidth: 1))
+                    }
+                    .padding(.horizontal, 20).padding(.bottom, 22).padding(.top, 4)
+                }
+                .background(SaycribeColor.keyboardBg)
+                .offset(y: keyboardOffset)
+                .animation(Motion.keyboardFollow, value: keyboardOffset)
+            }
+        }
+        .task {
+            let locked = ProcessInfo.processInfo.arguments.contains("-designPage")
+                || UserDefaults.standard.string(forKey: "designPage") != nil
+            withAnimation(Motion.fade) { showHost = true }
+            withAnimation(Motion.keyboardFollow) { keyboardOffset = 0 }
+            // 空闲态：点击说话 + 麦标；录音态留给 04
+            recording = false
+            mode = "语音"
+            if locked { return }
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            for m in ["EN", "拼", "语音"] {
+                withAnimation(Motion.morph) { mode = m }
+                try? await Task.sleep(nanoseconds: 900_000_000)
+            }
+            // 按下回弹演示，仍保持空闲麦标
+            withAnimation(Motion.press) { }
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            withAnimation(Motion.morph) { mode = "EN" }
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            withAnimation(Motion.morph) { mode = "语音" }
+        }
+    }
+
+    private func roundKey(_ icon: String, accent: Bool = false) -> some View {
+        Image(systemName: icon)
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundStyle(accent ? SaycribeColor.orange : SaycribeColor.textPrimary)
+            .frame(width: 48, height: 48)
+            .background(Circle().fill(accent ? SaycribeColor.orangeSoft : SaycribeColor.keyCap))
+            .overlay(Circle().stroke(accent ? SaycribeColor.orange.opacity(0.35) : SaycribeColor.border, lineWidth: 1))
+    }
+}
+
+// MARK: - 音量输入（第六版）
+/// 音量 0…1。真实 App 里来自录音 RMS；DesignPreview 用模拟曲线。
+protocol AudioLevelSource {
+    func level(at t: TimeInterval) -> Double
+}
+
+/// 模拟曲线：大声 → 小声 → 停顿（≈0）→ 再大声，带自然抖动。
+struct SimulatedAudioLevel: AudioLevelSource {
+    var loudOnly = false
+    /// 各段起点（秒，自录音开始）
+    static let softAt: TimeInterval = 3.5
+    static let pauseAt: TimeInterval = 6.5
+    static let loudAgainAt: TimeInterval = 9.0
+
+    func level(at t: TimeInterval) -> Double {
+        guard t > 0 else { return 0 }
+        let jitter = 0.5 + 0.5 * sin(t * 9.1) * sin(t * 3.7 + 1.3)
+        let base: Double
+        if loudOnly || t < Self.softAt || t >= Self.loudAgainAt {
+            base = 0.72 + 0.26 * jitter
+        } else if t < Self.pauseAt {
+            base = 0.18 + 0.14 * jitter
+        } else {
+            base = 0.02 * jitter
+        }
+        let attack = min(1, t / 0.25)
+        return max(0, min(1, base * attack))
+    }
+}
+
+/// 录音主按钮：陶土橙圆 + 音量联动缩放 + 3 层橙色正弦波纹环 + 等宽计时进度弧。
+struct VoiceOrb: View {
+    var recording: Bool
+    var start: Date
+    var pressed: Bool
+    var source: AudioLevelSource = SimulatedAudioLevel()
+    var diameter: CGFloat = 88
+
+    @State private var scale: CGFloat = 1
+    @State private var level: Double = 0
+
+    var body: some View {
+        ZStack {
+            TimelineView(.animation) { ctx in
+                let t = ctx.date.timeIntervalSince(start)
+                Canvas { c, size in
+                    let ctr = CGPoint(x: size.width / 2, y: size.height / 2)
+                    let r0 = diameter / 2
+                    for ring in (0..<3).reversed() {
+                        // 层间延迟：外层晚 0.14s × 层号 响应
+                        let lv = recording ? source.level(at: t - Double(ring) * 0.14) : 0
+                        let breathe = 0.5 + 0.5 * sin(t * 1.6 - Double(ring) * 0.8)
+                        let radius = r0 + CGFloat(ring + 1) * (4 + 12 * lv) + CGFloat(breathe) * 1.5
+                        let amp = CGFloat(0.6 + 6.5 * lv)
+                        let lobes = Double(5 + ring * 2)
+                        let ph = t * (1.3 + 0.45 * Double(ring))
+                        var p = Path()
+                        for k in 0...120 {
+                            let a = Double(k) / 120 * 2 * .pi
+                            let rr = radius + amp * CGFloat(sin(lobes * a + ph) + 0.45 * sin((lobes + 3) * a - ph * 1.3))
+                            let pt = CGPoint(x: ctr.x + rr * CGFloat(cos(a)), y: ctr.y + rr * CGFloat(sin(a)))
+                            if k == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
+                        }
+                        p.closeSubpath()
+                        let fade = Double(ring) * 0.025
+                        c.fill(p, with: .color(SaycribeColor.orangeDeep.opacity(max(0.03, 0.05 + 0.12 * lv - fade))))
+                        c.stroke(p, with: .color(SaycribeColor.orange.opacity(max(0.08, 0.16 + 0.36 * lv - fade * 2))),
+                                 lineWidth: 1.2)
+                    }
+                    if recording {
+                        // 60 秒进度弧
+                        let prog = min(1, max(0, t / 60))
+                        var arc = Path()
+                        arc.addArc(center: ctr, radius: r0 + 6, startAngle: .degrees(-90),
+                                   endAngle: .degrees(-90 + 360 * prog), clockwise: false)
+                        c.stroke(arc, with: .color(SaycribeColor.orange),
+                                 style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    }
+                }
+                .frame(width: diameter + 120, height: diameter + 120)
+            }
+            .scaleEffect(0.5 + scale * 0.5)
+
+            Circle()
+                .fill(SaycribeColor.orangeDeep)
+                .frame(width: diameter, height: diameter)
+                .shadow(color: SaycribeColor.orangeDeep.opacity(0.35), radius: 16, y: 6)
+                .overlay {
+                    if recording {
+                        LevelBars(level: level)
+                    } else {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: diameter * 0.34, weight: .semibold))
+                            .foregroundStyle(SaycribeColor.textPrimary)
+                    }
+                }
+                .scaleEffect(scale * (pressed ? 0.96 : 1))
+                .animation(Motion.press, value: pressed)
+        }
+        .frame(width: diameter + 120, height: diameter + 120)
+        .task(id: recording) {
+            while !Task.isCancelled {
+                let t = Date().timeIntervalSince(start)
+                let lv = recording ? source.level(at: t) : 0
+                withAnimation(Motion.pop) {
+                    level = lv
+                    scale = 1 + 0.12 * CGFloat(lv)
+                }
+                try? await Task.sleep(nanoseconds: 80_000_000)
+            }
+        }
+    }
+}
+
+/// 按钮内声波：条高 = 音量 × 每条形状
+struct LevelBars: View {
+    var level: Double
+    var count = 5
+    var body: some View {
+        TimelineView(.animation) { ctx in
+            let t = ctx.date.timeIntervalSinceReferenceDate
+            HStack(spacing: 4) {
+                ForEach(0..<count, id: \.self) { i in
+                    let shape = 0.55 + 0.45 * abs(sin(t * 5.2 + Double(i) * 1.1))
+                    Capsule()
+                        .fill(SaycribeColor.textPrimary)
+                        .frame(width: 4, height: 6 + CGFloat(level * shape) * 30)
+                }
+            }
+            .frame(height: 36)
+        }
+    }
+}
+
+/// Logo 旁状态点 + 等宽标签
+struct BrandStatusTag: View {
+    var live: Bool
+    var tag: String
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(live ? SaycribeColor.orangeDeep : SaycribeColor.textTertiary)
+                .frame(width: 6, height: 6)
+            Text(tag)
+                .font(SaycribeType.overline)
+                .foregroundStyle(SaycribeColor.textSecondary)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(Capsule().stroke(SaycribeColor.border, lineWidth: 1))
+    }
+}
+import SwiftUI
+
+/// 动效弹簧参数：来自牙膏哥指定的品牌规范。spring(response:dampingFraction:)
+enum Motion {
+    /// 弹出、徽标，明显回弹
+    static let pop = Animation.spring(response: 0.42, dampingFraction: 0.58)
+    /// 页面和卡片展开
+    static let smooth = Animation.spring(response: 0.50, dampingFraction: 0.86)
+    /// 形变、切换
+    static let morph = Animation.spring(response: 0.34, dampingFraction: 0.74)
+    /// 弹窗、面板进场
+    static let window = Animation.spring(response: 0.40, dampingFraction: 0.62)
+    /// 聚焦、几乎不回弹
+    static let focus = Animation.spring(response: 0.70, dampingFraction: 0.96)
+    /// 灵动岛形变（过冲约 1.095）
+    static let island = Animation.spring(response: 0.52, dampingFraction: 0.60)
+    /// Live Activity：spring(duration: 0.6, bounce: 0.32)
+    static let liveActivity = Animation.spring(duration: 0.6, bounce: 0.32)
+
+    static let exit = Animation.timingCurve(0.5, 0, 0.75, 0, duration: 0.42)
+    static let fade = Animation.timingCurve(0, 0, 0.58, 1, duration: 0.18)
+    /// 按钮按下
+    static let press = Animation.easeOut(duration: 0.15)
+    /// 滚动顶栏收起
+    static let scrollCollapse = Animation.easeOut(duration: 0.26)
+    /// 键盘跟随
+    static let keyboardFollow = Animation.easeOut(duration: 0.25)
+}
+
+/// 按钮按下缩放到约 0.96，easeOut 0.15s（来自牙膏哥指定的品牌规范）
+struct PressScaleStyle: ButtonStyle {
+    var scale: CGFloat = 0.96
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? scale : 1)
+            .animation(Motion.press, value: configuration.isPressed)
+    }
+}
+
+/// 列表/卡片进出场：scale + opacity
+struct AppearScaleOpacity: ViewModifier {
+    var shown: Bool
+    var scaleFrom: CGFloat = 0.92
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            .scaleEffect(shown ? 1 : scaleFrom)
+    }
+}
+
+extension View {
+    func appearScaleOpacity(_ shown: Bool, from: CGFloat = 0.92) -> some View {
+        modifier(AppearScaleOpacity(shown: shown, scaleFrom: from))
+            .animation(Motion.smooth, value: shown)
+    }
+}
+ M ../../.gitignore
+ M ../../Sources/Suikou/Cleaner.swift
+ M ../../Sources/Suikou/Coordinator.swift
+ M ../../Sources/Suikou/Interpreter.swift
+ D ../../Sources/Suikou/LocalCleaner.swift
+ M ../../Sources/Suikou/MainWindow.swift
+ M ../../Sources/Suikou/Segmenter.swift
+ M ../../Sources/Suikou/SelfTest.swift
+ M ../../Sources/Suikou/Settings.swift
+ M ../../Sources/Suikou/UnitTests.swift
+ M ../../Sources/Suikou/main.swift
+ M ../../docs/开发分工.2026-10-30.md
+?? ../../Sources/Suikou/KeychainStore.swift
+?? ../../Sources/Suikou/RelayBootstrap.swift
+?? ../../_xfer/
+?? ../../docs/Typeless参考截图/
+?? ../../docs/中转接口.md
+?? ../android/
+?? ../core/examples/warm_asr_bench.c
+?? ../core/target/
+?? ./
+?? ../linux/
+?? ../../中转服务/
+
+codex
+现有实现是三层闭合波纹。我会改成一圈错落的有机短弧，随音量扩张；按钮内换成 9 条镜像弧形声波。外沿限制在半径 101pt 内，保留原有间距、60s 进度弧和录音逻辑。
+exec
+/bin/zsh -lc "rg --files DesignPreview; xcrun --sdk iphonesimulator --show-sdk-path; rg -n 'LevelBars|VoiceOrb' DesignPreview; cat DesignPreview/DesignTokens.swift" in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 0ms:
+DesignPreview/Info.plist
+DesignPreview/DesignTokens.swift
+DesignPreview/Components/SharedChrome.swift
+DesignPreview/Screens/DemoScreen.swift
+DesignPreview/Screens/KeyboardGuideScreen.swift
+DesignPreview/Screens/MicPermissionScreen.swift
+DesignPreview/Screens/AddKeyboardScreen.swift
+DesignPreview/Screens/PrivacyScreen.swift
+DesignPreview/Screens/KeyboardLayoutScreen.swift
+DesignPreview/Screens/MainAppScreens.swift
+DesignPreview/Motion/MotionShowcase.swift
+DesignPreview/Motion/Motion.swift
+DesignPreview/DesignExportApp.swift
+/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.2.sdk
+DesignPreview/Motion/MotionShowcase.swift:246:                        VoiceOrb(recording: recording, start: recStart, pressed: pressFlash,
+DesignPreview/Motion/MotionShowcase.swift:526:struct VoiceOrb: View {
+DesignPreview/Motion/MotionShowcase.swift:584:                        LevelBars(level: level)
+DesignPreview/Motion/MotionShowcase.swift:610:struct LevelBars: View {
+import SwiftUI
+
+/// Saycribe 配色：来自牙膏哥指定的品牌规范（暗色）。只许黑 / 暖灰 / 暖白 / 陶土橙。
+enum SaycribeColor {
+    /// 主背景
+    static let bg = Color(hex: 0x0C0C0B)
+    /// 次级背景：bg 上叠白 4%（暖黑，无色偏）
+    static let bgElevated = Color(hex: 0x141412)
+    /// 卡片
+    static let card = Color(hex: 0x1A1917)
+    /// 卡片抬起一档
+    static let cardRaised = Color(hex: 0x2A2826)
+    /// 陶土橙：accent 暗 #E08A6C / 橙本体 #D97757
+    static let orange = Color(hex: 0xE08A6C)
+    static let orangeDeep = Color(hex: 0xD97757)
+    /// 橙软底 = #D97757 @20%
+    static let orangeSoft = Color(hex: 0xD97757, opacity: 0.20)
+    /// 文字层级
+    static let textPrimary = Color(hex: 0xF5F3EE)
+    static let textSecondary = Color(hex: 0x9A968C)
+    static let textTertiary = Color(hex: 0x5C584F)
+    /// sep 白 10%；fill 白 8%
+    static let border = Color.white.opacity(0.10)
+    static let borderStrong = Color.white.opacity(0.16)
+    static let fill = Color.white.opacity(0.08)
+    /// 状态色也收进三色：成功用暖白，警示用橙
+    static let success = Color(hex: 0xF5F3EE)
+    static let danger = Color(hex: 0xD97757)
+    /// 键盘区
+    static let keyboardBg = Color(hex: 0x1A1917)
+    static let keyCap = Color(hex: 0x22211F)
+    /// 主 CTA / 空闲录音钮：暖白底 + 深字
+    static let surfaceBright = Color(hex: 0xF5F3EE)
+    static let onBright = Color(hex: 0x0C0C0B)
+
+    static let warmBg = bg
+}
+
+/// 字体层级：来自牙膏哥指定的品牌规范（SF Pro / PingFang / SF Mono）
+enum SaycribeType {
+    static func f(_ size: CGFloat, _ w: Font.Weight = .regular) -> Font { .system(size: size, weight: w) }
+    static func mono(_ size: CGFloat, _ w: Font.Weight = .regular) -> Font { .system(size: size, weight: w, design: .monospaced) }
+    static let largeTitle = f(34, .bold)
+    static let title1 = f(28, .bold)
+    static let title3 = f(20, .semibold)
+    static let headline = f(17, .semibold)
+    static let body = f(17)
+    static let subhead = f(15)
+    static let subheadMedium = f(15, .medium)
+    static let footnote = f(13)
+    static let caption = f(12)
+    static let overline = mono(11, .medium)
+}
+
+enum SaycribeRadius {
+    static let xl: CGFloat = 28
+    static let lg: CGFloat = 22
+    static let md: CGFloat = 16
+    static let sm: CGFloat = 12
+    static let pill: CGFloat = 999
+}
+
+enum SaycribeFont {
+    static func display(_ size: CGFloat) -> Font { .system(size: size, weight: .bold) }
+    static func title(_ size: CGFloat) -> Font { .system(size: size, weight: .semibold) }
+    static func body(_ size: CGFloat) -> Font { .system(size: size, weight: .regular) }
+    static func medium(_ size: CGFloat) -> Font { .system(size: size, weight: .medium) }
+}
+
+extension Color {
+    init(hex: UInt32, opacity: Double = 1) {
+        let r = Double((hex >> 16) & 0xFF) / 255
+        let g = Double((hex >> 8) & 0xFF) / 255
+        let b = Double(hex & 0xFF) / 255
+        self.init(.sRGB, red: r, green: g, blue: b, opacity: opacity)
+    }
+}
+
+struct DesignCanvas: ViewModifier {
+    var isPad: Bool
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(SaycribeColor.bg.ignoresSafeArea())
+            .environment(\.designIsPad, isPad)
+            .preferredColorScheme(.dark)
+    }
+}
+
+private struct DesignIsPadKey: EnvironmentKey {
+    static let defaultValue = false
+}
+extension EnvironmentValues {
+    var designIsPad: Bool {
+        get { self[DesignIsPadKey.self] }
+        set { self[DesignIsPadKey.self] = newValue }
+    }
+}
+
+extension View {
+    func designCanvas(isPad: Bool) -> some View { modifier(DesignCanvas(isPad: isPad)) }
+}
+
+exec
+/bin/zsh -lc "python3 - <<'PY'
+from pathlib import Path
+p=Path('DesignPreview/Motion/MotionShowcase.swift')
+s=p.read_text()
+a=s.index('/// 录音主按钮：')
+b=s.index('/// Logo 旁状态点',a)
+s=s[:a]+'''/// 录音主按钮：陶土橙圆 + 随音量舒展的碎弧花冠 + 60 秒进度弧。
+struct VoiceOrb: View {
+    var recording: Bool
+    var start: Date
+    var pressed: Bool
+    var source: AudioLevelSource = SimulatedAudioLevel()
+    var diameter: CGFloat = 88
+
+    @State private var level: Double = 0
+
+    var body: some View {
+        ZStack {
+            TimelineView(.animation(minimumInterval: 1.0 / 30)) { ctx in
+                let t = max(0, ctx.date.timeIntervalSince(start))
+                Canvas { c, size in
+                    let ctr = CGPoint(x: size.width / 2, y: size.height / 2)
+                    let r0 = diameter / 2
+                    // 一条断开的不规则花冠，各短弧有独立相位与径向错位；没有闭合光晕。
+                    // 半径硬上限 r0 + 56，含描边外沿默认 ≤ 101pt，不参与按钮缩放。
+                    for fragment in 0..<13 {
+                        let seed = Double(fragment)
+                        let phase = t * 0.45 + seed * 2.39996
+                        let breath = 0.5 + 0.5 * sin(t * 0.85 + seed * 0.3)
+                        let spread = 5 + 35 * level
+                        let stagger = (0.5 + 0.5 * sin(seed * 1.7)) * (2 + 7 * level)
+                        let base = Double(r0) + 9 + spread - stagger + breath * 0.8
+                        let centerAngle = seed / 13 * 2 * Double.pi + 0.04 * sin(phase)
+                        let span = (0.19 + 0.11 * (0.5 + 0.5 * sin(seed * 3.1))) * (0.85 + 0.15 * level)
+                        var path = Path()
+                        for sample in 0...20 {
+                            let u = Double(sample) / 20
+                            let angle = centerAngle + (u - 0.5) * span
+                            let petal = sin(angle * 3 + phase) * 0.62
+                                + sin(angle * 5 - phase * 0.71) * 0.38
+                            let radius = min(Double(r0) + 56, base + (0.5 + 7 * level) * petal)
+                            let point = CGPoint(x: ctr.x + CGFloat(radius * cos(angle)),
+                                                y: ctr.y + CGFloat(radius * sin(angle)))
+                            if sample == 0 { path.move(to: point) } else { path.addLine(to: point) }
+                        }
+                        let shimmer = 0.5 + 0.5 * sin(phase + seed)
+                        c.stroke(path, with: .color(SaycribeColor.orange.opacity(
+                            0.12 + level * (0.28 + 0.30 * shimmer))),
+                            style: StrokeStyle(lineWidth: 0.9 + level * 0.9, lineCap: .round))
+                    }
+                    if recording {
+                        // 60 秒进度弧保持独立，始终贴近按钮。
+                        let prog = min(1, max(0, t / 60))
+                        var arc = Path()
+                        arc.addArc(center: ctr, radius: r0 + 9, startAngle: .degrees(-90),
+                                   endAngle: .degrees(-90 + 360 * prog), clockwise: false)
+                        c.stroke(arc, with: .color(SaycribeColor.orange),
+                                 style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    }
+                }
+                .frame(width: diameter + 120, height: diameter + 120)
+            }
+
+            Circle()
+                .fill(SaycribeColor.orangeDeep)
+                .frame(width: diameter, height: diameter)
+                .shadow(color: SaycribeColor.orangeDeep.opacity(0.35), radius: 16, y: 6)
+                .overlay {
+                    if recording {
+                        LevelBars(level: level)
+                    } else {
+                        Image(systemName: \"mic.fill\")
+                            .font(.system(size: diameter * 0.34, weight: .semibold))
+                            .foregroundStyle(SaycribeColor.textPrimary)
+                    }
+                }
+                .scaleEffect((1 + 0.12 * CGFloat(level)) * (pressed ? 0.96 : 1))
+                .animation(Motion.press, value: pressed)
+        }
+        .frame(width: diameter + 120, height: diameter + 120)
+        .task(id: recording) {
+            var previous = Date()
+            while "'!Task.isCancelled {
+                let now = Date()
+                let target = recording ? source.level(at: now.timeIntervalSince(start)) : 0
+                // 时间相关的快起慢落：停顿时稳定收拢，不用高回弹弹簧反复追逐音量。
+                let elapsed = now.timeIntervalSince(previous)
+                let response = target > level ? 0.075 : 0.22
+                level += (target - level) * (1 - exp(-elapsed / response))
+                previous = now
+                do {
+                    try await Task.sleep(nanoseconds: 33_333_333)
+                } catch {
+                    return // recording 改变或视图退出时结束旧采样任务。
+                }
+            }
+        }
+    }
+}
+
+/// 暖白镜像声羽：九条沿浅弧展开，成对跳动，停顿时收成细小的弧形刻度。
+struct LevelBars: View {
+    var level: Double
+    var count = 9
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30)) { ctx in
+            let t = ctx.date.timeIntervalSinceReferenceDate
+            HStack(spacing: 2.5) {
+                ForEach(0..<count, id: '"\\\\.self) { i in
+                    let center = Double(count - 1) / 2
+                    let position = Double(i) - center
+                    let distance = abs(position) / max(1, center)
+                    let envelope = 1 - 0.55 * distance
+                    let syllable = 0.65 + 0.35 * sin(t * 7.2 - abs(position) * 0.85)
+                    Capsule()
+                        .fill(SaycribeColor.textPrimary)
+                        .frame(width: 3, height: 4 + CGFloat(level * envelope * syllable) * 28)
+                        .rotationEffect(.degrees(position * 5))
+                        .offset(y: CGFloat(distance * distance) * 7 - 3)
+                }
+            }
+            .frame(height: 40)
+        }
+    }
+}
+
+'''+s[b:]
+p.write_text(s)
+PY
+xcrun swiftc -parse DesignPreview/Motion/MotionShowcase.swift DesignPreview/Motion/Motion.swift" in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 484ms:
+exec
+/bin/zsh -lc 'xcrun swiftc -typecheck -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.2.sdk -target arm64-apple-ios17.0-simulator $(rg --files DesignPreview -g '"'*.swift')" in /Users/zjh/claude-workdir/suikou/platforms/ios
+codex
+动效已替换，语法检查通过，正在对整个 DesignPreview 做 iOS Simulator typecheck。音量响应改为约 75ms 起、220ms 落；停顿时短弧收拢，只保留轻微慢呼吸，原有页面间距未改。
+ succeeded in 6846ms:
+exec
+/bin/zsh -lc "sed -n '520,685p' DesignPreview/Motion/MotionShowcase.swift; git diff --stat -- DesignPreview/Motion/Motion.swift; rg -n 'padding\\(\\.top, 64\\)|padding\\(\\.bottom, -28\\)' DesignPreview/Motion/MotionShowcase.swift" in /Users/zjh/claude-workdir/suikou/platforms/ios
+ succeeded in 0ms:
+        let attack = min(1, t / 0.25)
+        return max(0, min(1, base * attack))
+    }
+}
+
+/// 录音主按钮：陶土橙圆 + 随音量舒展的碎弧花冠 + 60 秒进度弧。
+struct VoiceOrb: View {
+    var recording: Bool
+    var start: Date
+    var pressed: Bool
+    var source: AudioLevelSource = SimulatedAudioLevel()
+    var diameter: CGFloat = 88
+
+    @State private var level: Double = 0
+
+    var body: some View {
+        ZStack {
+            TimelineView(.animation(minimumInterval: 1.0 / 30)) { ctx in
+                let t = max(0, ctx.date.timeIntervalSince(start))
+                Canvas { c, size in
+                    let ctr = CGPoint(x: size.width / 2, y: size.height / 2)
+                    let r0 = diameter / 2
+                    // 一条断开的不规则花冠，各短弧有独立相位与径向错位；没有闭合光晕。
+                    // 半径硬上限 r0 + 56，含描边外沿默认 ≤ 101pt，不参与按钮缩放。
+                    for fragment in 0..<13 {
+                        let seed = Double(fragment)
+                        let phase = t * 0.45 + seed * 2.39996
+                        let breath = 0.5 + 0.5 * sin(t * 0.85 + seed * 0.3)
+                        let spread = 5 + 35 * level
+                        let stagger = (0.5 + 0.5 * sin(seed * 1.7)) * (2 + 7 * level)
+                        let base = Double(r0) + 9 + spread - stagger + breath * 0.8
+                        let centerAngle = seed / 13 * 2 * Double.pi + 0.04 * sin(phase)
+                        let span = (0.19 + 0.11 * (0.5 + 0.5 * sin(seed * 3.1))) * (0.85 + 0.15 * level)
+                        var path = Path()
+                        for sample in 0...20 {
+                            let u = Double(sample) / 20
+                            let angle = centerAngle + (u - 0.5) * span
+                            let petal = sin(angle * 3 + phase) * 0.62
+                                + sin(angle * 5 - phase * 0.71) * 0.38
+                            let radius = min(Double(r0) + 56, base + (0.5 + 7 * level) * petal)
+                            let point = CGPoint(x: ctr.x + CGFloat(radius * cos(angle)),
+                                                y: ctr.y + CGFloat(radius * sin(angle)))
+                            if sample == 0 { path.move(to: point) } else { path.addLine(to: point) }
+                        }
+                        let shimmer = 0.5 + 0.5 * sin(phase + seed)
+                        c.stroke(path, with: .color(SaycribeColor.orange.opacity(
+                            0.12 + level * (0.28 + 0.30 * shimmer))),
+                            style: StrokeStyle(lineWidth: 0.9 + level * 0.9, lineCap: .round))
+                    }
+                    if recording {
+                        // 60 秒进度弧保持独立，始终贴近按钮。
+                        let prog = min(1, max(0, t / 60))
+                        var arc = Path()
+                        arc.addArc(center: ctr, radius: r0 + 9, startAngle: .degrees(-90),
+                                   endAngle: .degrees(-90 + 360 * prog), clockwise: false)
+                        c.stroke(arc, with: .color(SaycribeColor.orange),
+                                 style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    }
+                }
+                .frame(width: diameter + 120, height: diameter + 120)
+            }
+
+            Circle()
+                .fill(SaycribeColor.orangeDeep)
+                .frame(width: diameter, height: diameter)
+                .shadow(color: SaycribeColor.orangeDeep.opacity(0.35), radius: 16, y: 6)
+                .overlay {
+                    if recording {
+                        LevelBars(level: level)
+                    } else {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: diameter * 0.34, weight: .semibold))
+                            .foregroundStyle(SaycribeColor.textPrimary)
+                    }
+                }
+                .scaleEffect((1 + 0.12 * CGFloat(level)) * (pressed ? 0.96 : 1))
+                .animation(Motion.press, value: pressed)
+        }
+        .frame(width: diameter + 120, height: diameter + 120)
+        .task(id: recording) {
+            var previous = Date()
+            while !Task.isCancelled {
+                let now = Date()
+                let target = recording ? source.level(at: now.timeIntervalSince(start)) : 0
+                // 时间相关的快起慢落：停顿时稳定收拢，不用高回弹弹簧反复追逐音量。
+                let elapsed = now.timeIntervalSince(previous)
+                let response = target > level ? 0.075 : 0.22
+                level += (target - level) * (1 - exp(-elapsed / response))
+                previous = now
+                do {
+                    try await Task.sleep(nanoseconds: 33_333_333)
+                } catch {
+                    return // recording 改变或视图退出时结束旧采样任务。
+                }
+            }
+        }
+    }
+}
+
+/// 暖白镜像声羽：九条沿浅弧展开，成对跳动，停顿时收成细小的弧形刻度。
+struct LevelBars: View {
+    var level: Double
+    var count = 9
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30)) { ctx in
+            let t = ctx.date.timeIntervalSinceReferenceDate
+            HStack(spacing: 2.5) {
+                ForEach(0..<count, id: \.self) { i in
+                    let center = Double(count - 1) / 2
+                    let position = Double(i) - center
+                    let distance = abs(position) / max(1, center)
+                    let envelope = 1 - 0.55 * distance
+                    let syllable = 0.65 + 0.35 * sin(t * 7.2 - abs(position) * 0.85)
+                    Capsule()
+                        .fill(SaycribeColor.textPrimary)
+                        .frame(width: 3, height: 4 + CGFloat(level * envelope * syllable) * 28)
+                        .rotationEffect(.degrees(position * 5))
+                        .offset(y: CGFloat(distance * distance) * 7 - 3)
+                }
+            }
+            .frame(height: 40)
+        }
+    }
+}
+
+/// Logo 旁状态点 + 等宽标签
+struct BrandStatusTag: View {
+    var live: Bool
+    var tag: String
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(live ? SaycribeColor.orangeDeep : SaycribeColor.textTertiary)
+                .frame(width: 6, height: 6)
+            Text(tag)
+                .font(SaycribeType.overline)
+                .foregroundStyle(SaycribeColor.textSecondary)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(Capsule().stroke(SaycribeColor.border, lineWidth: 1))
+    }
+}
+251:                    .padding(.top, -2).padding(.bottom, -28)
+267:                    .padding(.top, 64)
+
+codex
+已修改 [MotionShowcase.swift](/Users/zjh/claude-workdir/suikou/platforms/ios/DesignPreview/Motion/MotionShowcase.swift:525)。
+
+- 三圈波纹换成 13 段错相有机短弧，随音量扩张、停顿收拢。
+- 内部换成 9 条镜像弧形声波，按钮同步缩放。
+- 波纹外沿限制在 101pt 内，保留原间距、60s 进度弧及音量接口。
+- `swiftc -parse` 和整个 DesignPreview 的 iOS Simulator typecheck 均通过；未做实机视觉验收。
+
+只改了该文件，无 git 提交、联网下载或临时调试文件。
+tokens used
+68,822
+已修改 [MotionShowcase.swift](/Users/zjh/claude-workdir/suikou/platforms/ios/DesignPreview/Motion/MotionShowcase.swift:525)。
+
+- 三圈波纹换成 13 段错相有机短弧，随音量扩张、停顿收拢。
+- 内部换成 9 条镜像弧形声波，按钮同步缩放。
+- 波纹外沿限制在 101pt 内，保留原间距、60s 进度弧及音量接口。
+- `swiftc -parse` 和整个 DesignPreview 的 iOS Simulator typecheck 均通过；未做实机视觉验收。
+
+只改了该文件，无 git 提交、联网下载或临时调试文件。

@@ -1,0 +1,3 @@
+<input-method xmlns:android="http://schemas.android.com/apk/res/android">
+    <subtype android:label="中文语音" android:imeSubtypeLocale="zh_CN" android:imeSubtypeMode="voice"/>
+</input-method>

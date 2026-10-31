@@ -1,0 +1,3 @@
+#!/bin/sh
+set -a; . /etc/saycribe-relay/relay.env; set +a
+exec runuser -u saycribe -- env SC_DB=/var/lib/saycribe-relay/tokens.db python3 /opt/saycribe-relay/relay.py "$@"

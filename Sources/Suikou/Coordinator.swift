@@ -74,7 +74,7 @@ final class Coordinator: HotkeyDelegate {
             flash(.error("麦克风不可用：\(error.localizedDescription)"))
             return
         }
-        cleaner.warmUp(apiKey: llmConfig.apiKey)
+        cleaner.warmUp(baseURL: llmConfig.baseURL)
         pendingEditing = mode == .dictate && ctx.selectedText != nil
         pendingTranslateLabel = mode == .translate ? settings.currentTranslateTarget.short : nil
         revealed = false
@@ -124,7 +124,6 @@ final class Coordinator: HotkeyDelegate {
         isProcessing = true
         let started = Date()
         let config = llmConfig, llmEnabled = settings.llmEnabled
-        let skipShort = settings.skipShortSentences, shortLimit = settings.shortSentenceLimit
         let audioSeconds = Double(samples.count) / AudioRecorder.sampleRate
         let mode = self.mode, target = settings.currentTranslateTarget
 
@@ -139,15 +138,28 @@ final class Coordinator: HotkeyDelegate {
             guard !raw.isEmpty else { await MainActor.run { finish(.error("没听清，再说一次")) }; return }
 
             var text = raw
-            var warning: String?
-            var handledLocally = false
+            func hudMessage(for error: Error) -> String {
+                if let e = error as? CleanerError {
+                    if e.isOffline { return "需要联网" }
+                    return e.errorDescription ?? e.localizedDescription
+                }
+                let ns = error as NSError
+                if ns.domain == NSURLErrorDomain { return "需要联网" }
+                return error.localizedDescription
+            }
+            // Capture cleaner explicitly so the Task / cleanAll closures do not retain Coordinator (self).
+            let cleaner = self.cleaner
             if mode == .translate {
                 do {
                     text = try await cleaner.translate(raw, direction: target.instruction, style: ctx.style, config: config)
                 } catch {
                     await MainActor.run {
-                        Inserter.copy(raw)
-                        finish(.error("翻译失败，原文已复制"), for: 2.5)
+                        if settings.saveHistory {
+                            history.add(HistoryEntry(date: Date(), app: ctx.appName, raw: raw, text: raw,
+                                                     ms: Int(Date().timeIntervalSince(started) * 1000),
+                                                     audioSeconds: audioSeconds, mode: "translate:\(target.id)"))
+                        }
+                        finish(.error(hudMessage(for: error)), for: 2.5)
                     }
                     return
                 }
@@ -156,28 +168,39 @@ final class Coordinator: HotkeyDelegate {
                     text = try await cleaner.edit(selection: selection, instruction: raw, config: config)
                 } catch {
                     // Never replace the user's selection with the spoken instruction itself.
-                    await MainActor.run { finish(.error("改写失败：\(error.localizedDescription)")) }
+                    await MainActor.run { finish(.error(hudMessage(for: error))) }
                     return
                 }
-            } else if llmEnabled && !(skipShort && Stats.count(raw) <= shortLimit) {
+            } else if llmEnabled {
                 do {
-                    text = try await Segmenter.cleanAll(rawParts) { [cleaner] in try await cleaner.clean($0, style: ctx.style, config: config) }
+                    let sessionId = UUID().uuidString
+                    text = try await Segmenter.cleanAll(rawParts) { piece, seq, context, final in
+                        try await cleaner.clean(piece, style: ctx.style, config: config,
+                                                sessionId: sessionId, seq: seq, context: context, final: final)
+                    }
                 } catch {
-                    text = LocalCleaner.clean(raw, style: ctx.style)
-                    warning = "未整理（\(error.localizedDescription)）"
+                    // Keep the raw transcript in history; no local fallback.
+                    await MainActor.run {
+                        if settings.saveHistory {
+                            history.add(HistoryEntry(date: Date(), app: ctx.appName, raw: raw, text: raw,
+                                                     ms: Int(Date().timeIntervalSince(started) * 1000),
+                                                     audioSeconds: audioSeconds, mode: nil))
+                        }
+                        finish(.error(hudMessage(for: error)), for: 2.5)
+                    }
+                    return
                 }
             } else {
-                // Short sentence (or AI cleanup off): tidy it on-device and skip the API round trip.
-                text = LocalCleaner.clean(raw, style: ctx.style)
-                handledLocally = true
+                // AI cleanup off: insert the raw recognition text as-is.
+                text = raw
             }
-            let finalText = text, finalWarning = warning, local = handledLocally
+            let finalText = text
             let ms = Int(Date().timeIntervalSince(started) * 1000)
 
             await MainActor.run {
                 guard !finalText.isEmpty else { finish(nil); return }
                 if settings.saveHistory { history.add(HistoryEntry(date: Date(), app: ctx.appName, raw: raw, text: finalText, ms: ms, audioSeconds: audioSeconds,
-                                         mode: mode == .translate ? "translate:\(target.id)" : (local ? "local" : nil))) }
+                                         mode: mode == .translate ? "translate:\(target.id)" : nil)) }
                 stats.record(text: finalText, audioSeconds: audioSeconds)
 
                 // Paste only into the window the user was talking to, and only if we're allowed to send keystrokes.
@@ -188,11 +211,7 @@ final class Coordinator: HotkeyDelegate {
                     return
                 }
                 Inserter.insert(finalText, restoreClipboard: !settings.keepInClipboard)
-                if let finalWarning {
-                    finish(.error(finalWarning), for: 2.5)
-                } else {
-                    finish(.done, for: 0.7)
-                }
+                finish(.done, for: 0.7)
             }
         }
     }
